@@ -4,61 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PONG: Maybe You'll Win</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root {
-            --primary: #00ffcc; --secondary: #ff0066; --owen: #ff00ff; --michael: #0066ff; --bg: #0b0b0e;
-        }
-        body {
-            margin: 0; background: var(--bg); display: flex; justify-content: center; align-items: center;
-            height: 100vh; width: 100vw; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden;
-            touch-action: none;
-        }
-        #game-wrapper {
-            position: relative; width: 95vw; height: calc(95vw * (500 / 800));
-            max-width: 800px; max-height: 500px; display: flex; flex-direction: column;
-        }
-        #touch-track {
-            position: absolute; left: -45px; top: 0; width: 40px; height: 100%;
-            background: rgba(0, 255, 204, 0.1); border-left: 2px solid var(--primary);
-            border-radius: 4px; z-index: 10; display: flex; justify-content: center; align-items: center;
-        }
-        #touch-track::after { content: 'TOUCH'; writing-mode: vertical-lr; font-size: 10px; letter-spacing: 5px; color: var(--primary); opacity: 0.4; }
-
-        #ui-header {
-            position: absolute; top: -70px; width: 100%; display: flex; justify-content: space-around;
-            align-items: center; font-size: clamp(20px, 4vw, 50px); font-weight: 800; z-index: 5;
-        }
+        :root { --primary: #00ffcc; --secondary: #ff0066; --owen: #ff00ff; --michael: #0066ff; --bg: #0b0b0e; }
+        body { margin: 0; background: var(--bg); display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
+        #game-wrapper { position: relative; width: 95vw; height: calc(95vw * (500 / 800)); max-width: 800px; max-height: 500px; display: flex; flex-direction: column; }
+        #ui-header { position: absolute; top: -70px; width: 100%; display: flex; justify-content: space-around; align-items: center; font-size: clamp(20px, 4vw, 50px); font-weight: 800; z-index: 5; }
         #timer-display { font-family: monospace; color: #ffcc00; font-size: 0.7em; background: rgba(255,255,255,0.05); padding: 5px 15px; border-radius: 20px; display: none; }
-        
-        canvas { background: #0e0e12; width: 100%; height: 100%; border-radius: 8px; border: 2px solid #222; display: block; }
-        
-        .overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 15, 0.96); backdrop-filter: blur(12px);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 20; text-align: center; border-radius: 8px;
-        }
+        canvas { background: #0e0e12; width: 100%; height: 100%; border-radius: 8px; border: 2px solid #222; box-shadow: 0 0 50px rgba(0,0,0,0.8); display: block; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 15, 0.96); backdrop-filter: blur(12px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; text-align: center; border-radius: 8px; }
         h1 { font-size: clamp(30px, 8vw, 70px); margin: 0; letter-spacing: 15px; }
         .tagline { color: var(--primary); font-size: clamp(12px, 2vw, 18px); margin-bottom: 20px; font-style: italic; }
         .btn-group { display: flex; flex-direction: column; gap: 8px; align-items: center; }
         .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-        input { background: #000; border: 1px solid #444; color: var(--primary); padding: 8px; border-radius: 4px; text-align: center; margin: 5px; outline: none; }
+        input { background: #000; border: 1px solid #444; color: var(--primary); padding: 8px; border-radius: 4px; text-align: center; outline: none; }
         button { padding: 8px 18px; font-size: 12px; background: transparent; color: #fff; border: 2px solid #fff; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase; transition: 0.2s; }
         button:hover { background: #fff; color: #000; }
         .active-btn { border-color: #ffcc00; color: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
-        .btn-owen.active { border-color: var(--owen); color: var(--owen); }
-        .btn-michael.active { border-color: var(--michael); color: var(--michael); }
+        .btn-owen.active { background: var(--owen); color: white; }
+        .btn-michael.active { background: var(--michael); color: white; }
         .diff-btn.selected { border-color: var(--primary); color: var(--primary); }
         h3 { margin: 10px 0 2px; font-size: 10px; color: #666; letter-spacing: 2px; }
-
-        @media (max-width: 900px) { #touch-track { left: 5px; background: rgba(0, 255, 204, 0.2); } }
+        #touch-track { position: absolute; left: -45px; top: 0; width: 40px; height: 100%; background: rgba(0, 255, 204, 0.1); border-left: 2px solid var(--primary); border-radius: 4px; z-index: 10; }
     </style>
 </head>
 <body>
 
     <div id="game-wrapper">
         <div id="touch-track"></div>
-
         <div id="ui-header" style="opacity: 0;">
             <div id="p1Score" style="color: var(--primary)">0</div>
             <div id="timer-display">01:30</div>
@@ -69,62 +42,65 @@
             <h1>PONG</h1>
             <div class="tagline">Maybe you'll win</div>
             <div class="btn-group">
-                <button onclick="init(1)">1 Player</button>
-                <button onclick="init(2)">2 Players</button>
+                <div class="row">
+                    <button onclick="init(1)">1 Player</button>
+                    <button onclick="init(2)">2 Players</button>
+                    <button onclick="showMultiMenu()" style="border-color: #ffcc00; color: #ffcc00;">Online</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="multiMenu" class="overlay" style="display: none;">
+            <h1>MULTIPLAYER</h1>
+            <div class="btn-group">
+                <button onclick="startMultiplayer(true)">Host Game</button>
+                <div class="row"><input type="text" id="joinId" placeholder="CODE"><button onclick="startMultiplayer(false)">Join</button></div>
+                <div id="statusMsg" style="font-size: 12px; color: #666; margin-top: 10px;">Connect to internet to play online.</div>
+                <button onclick="location.reload()" style="margin-top: 20px; border-color: #444;">Back</button>
             </div>
         </div>
 
         <div id="pauseMenu" class="overlay" style="display: none;">
             <h1>PAUSED</h1>
             <div class="btn-group">
-                <div class="row">
-                    <button onclick="togglePause()">Resume</button>
-                    <button onclick="restartMatch()" style="color: var(--primary); border-color: var(--primary);">Restart Match</button>
-                </div>
+                <button onclick="togglePause()">Resume</button>
+                <button onclick="restartMatch()">Restart</button>
                 <h3>Game Mode</h3>
                 <div class="row">
                     <button id="modeClassic" class="active-btn" onclick="setGameMode('classic')">Classic</button>
-                    <button id="modeTimed" onclick="setGameMode('timed')">Timed Round</button>
+                    <button id="modeTimed" onclick="setGameMode('timed')">Timed</button>
                 </div>
-                <div id="p1ControlsUI">
-                    <h3>P1 Controls</h3>
-                    <button id="btnP1Keys" onclick="toggleP1Keybinds()">Keys: WASD</button>
+                <div id="godControls">
+                    <h3>God Modes</h3>
+                    <div class="row">
+                        <button id="owenBtn" class="btn-owen" onclick="toggleOwen()">Owen</button>
+                        <button id="michaelBtn" class="btn-michael" onclick="toggleMichael()">Michael</button>
+                    </div>
                 </div>
-                <h3 id="aiTitle">AI Difficulty</h3>
-                <div class="row" id="aiControls">
-                    <button id="diff0" onclick="setDiff(0)">Easy</button>
-                    <button id="diff1" onclick="setDiff(1)">Med</button>
-                    <button id="diff2" onclick="setDiff(2)">Hard</button>
-                </div>
-                <h3>God Modes</h3>
-                <div class="row">
-                    <button id="owenBtnPause" class="btn-owen" onclick="toggleOwen()">Owen</button>
-                    <button id="michaelBtnPause" class="btn-michael" onclick="toggleMichael()">Michael</button>
-                </div>
-                <button onclick="location.reload()" style="margin-top:10px; border-color: #444; color: #444;">Quit</button>
+                <h3>Extra</h3>
+                <button id="chaosBtn" class="btn-variant" onclick="toggleChaos()">Chaos Mode: OFF</button>
+                <button onclick="location.reload()" style="margin-top:15px; border-color: #444;">Quit</button>
             </div>
         </div>
 
-        <div id="secretWindow" class="overlay" style="display: none; border: 2px solid #ffcc00;">
-            <h2 style="color: #ffcc00;">ADMIN ACCESS</h2>
+        <div id="secretWindow" class="overlay" style="display: none;">
+            <h2 style="color: #ffcc00;">ADMIN TERMINAL</h2>
             <input type="password" id="adminPass" placeholder="PASSWORD">
             <div id="cheats" style="display: none;">
                 <div class="row">
-                    <div>P1 Score: <input type="number" id="chP1" style="width: 40px;"></div>
-                    <div>P2 Score: <input type="number" id="chP2" style="width: 40px;"></div>
+                    <input type="number" id="chP1" placeholder="P1" style="width: 50px;">
+                    <input type="number" id="chP2" placeholder="P2" style="width: 50px;">
                 </div>
-                <div>Timer (sec): <input type="number" id="chTime" style="width: 60px;"></div>
-                <button onclick="applyCheats()" style="border-color: var(--primary); margin-top: 10px;">Apply Changes</button>
+                <input type="number" id="chTime" placeholder="Timer (sec)" style="width: 100px;">
+                <button onclick="applyCheats()" style="display: block; margin-top: 10px;">Apply</button>
             </div>
-            <div class="row" style="margin-top: 10px;">
-                <button onclick="checkAdmin()">Unlock</button>
-                <button onclick="closeAdmin()">Cancel</button>
-            </div>
+            <button onclick="checkAdmin()" style="margin-top: 10px;">Unlock</button>
+            <button onclick="closeAdmin()">Close</button>
         </div>
 
         <div id="winScreen" class="overlay" style="display: none;">
             <h2 id="winnerText" style="font-size: 40px;">WINNER</h2>
-            <button onclick="location.reload()">Back to Menu</button>
+            <button onclick="location.reload()">Return</button>
         </div>
 
         <canvas id="pong" width="800" height="500"></canvas>
@@ -132,199 +108,161 @@
 
     <script>
         const canvas = document.getElementById("pong"), ctx = canvas.getContext("2d");
-        const touchTrack = document.getElementById("touch-track");
-        
         const P_WIDTH = 12, B_RAD = 8, WIN_SCORE = 10;
         const START_SPEED = 6.5, MAX_SPEED = 22, SPEED_MULT = 1.04, GOD_SPEED_MULT = 1.15;
 
-        let gameActive = false, paused = false, mode = 1, shake = 0;
+        let gameActive = false, paused = false, mode = 1, shake = 0, chaosMode = false;
         let gameModeType = 'classic', timeLeft = 90;
-
         let owenMode = false, michaelMode = false, p1Stealth = false, p2Stealth = false;
-        let difficulty = 1;
-        let p1Keys = { up: 'KeyW', down: 'KeyS', label: 'WASD' };
+        let difficulty = 1, isHost = false, online = false, conn, peer;
+        const keys = {}, particles = [];
         
-        const keys = {};
-        const p1 = { x: 20, y: 200, vy: 0, h: 100, score: 0, color: '#00ffcc', trail: [], pulse: 0 };
-        const p2 = { x: 768, y: 200, vy: 0, h: 100, score: 0, color: '#ff0066', trail: [], pulse: 0 };
+        const p1 = { x: 20, y: 200, vy: 0, h: 100, score: 0, color: '#00ffcc', trail: [] };
+        const p2 = { x: 768, y: 200, vy: 0, h: 100, score: 0, color: '#ff0066', trail: [] };
         const ball = { x: 400, y: 250, dx: 0, dy: 0, speed: START_SPEED, trail: [] };
+        let currentPowerUp = null;
 
         window.addEventListener("keydown", e => {
             keys[e.code] = true;
             if (e.code === "Escape") togglePause();
-            if (keys['KeyW'] && keys['KeyP'] && gameActive) openAdmin();
+            if (keys['KeyW'] && keys['KeyP'] && !online) openAdmin();
             if (e.shiftKey && e.code === "Digit1") p1Stealth = !p1Stealth;
             if (e.shiftKey && e.code === "Digit2") p2Stealth = !p2Stealth;
         });
         window.addEventListener("keyup", e => keys[e.code] = false);
 
-        function handleTouch(e) {
-            if (!gameActive || paused || owenMode) return;
-            e.preventDefault();
-            const rect = touchTrack.getBoundingClientRect();
-            const touchY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-            p1.y = (touchY / rect.height) * 500 - p1.h / 2;
-            p1.vy = 0;
-        }
-        touchTrack.addEventListener("touchstart", handleTouch);
-        touchTrack.addEventListener("touchmove", handleTouch);
+        document.getElementById("touch-track").addEventListener("touchmove", e => {
+            if (!gameActive || paused) return;
+            const rect = canvas.getBoundingClientRect();
+            const touchY = e.touches[0].clientY - rect.top;
+            const logicalY = (touchY / rect.height) * 500;
+            if (!online || isHost) p1.y = logicalY - p1.h/2; else p2.y = logicalY - p2.h/2;
+        });
 
-        function openAdmin() { paused = true; document.getElementById('secretWindow').style.display = 'flex'; }
-        function closeAdmin() { document.getElementById('secretWindow').style.display = 'none'; document.getElementById('cheats').style.display = 'none'; document.getElementById('adminPass').value = ""; paused = false; }
-        function checkAdmin() { if (document.getElementById('adminPass').value === "dieh0neydie") document.getElementById('cheats').style.display = 'block'; }
+        function showMultiMenu() { document.getElementById('menu').style.display='none'; document.getElementById('multiMenu').style.display='flex'; }
         
-        function applyCheats() {
-            p1.score = parseInt(document.getElementById('chP1').value);
-            p2.score = parseInt(document.getElementById('chP2').value);
-            timeLeft = parseInt(document.getElementById('chTime').value);
-            document.getElementById("p1Score").innerText = p1.score;
-            document.getElementById("p2Score").innerText = p2.score;
-            closeAdmin();
+        function startMultiplayer(host) {
+            document.getElementById('statusMsg').innerText = "Connecting...";
+            peer = new Peer(host ? Math.floor(1000 + Math.random()*9000).toString() : null);
+            peer.on('open', id => {
+                if(host) { isHost = true; document.getElementById('statusMsg').innerHTML = `CODE: <b style='color:white; font-size:24px;'>${id}</b><br>Give this to Player 2`; }
+                else { conn = peer.connect(document.getElementById('joinId').value); setupConn(); }
+            });
+            peer.on('connection', c => { conn = c; isHost = true; setupConn(); init(2, true); });
         }
 
-        function init(m) {
-            mode = m; gameActive = true;
-            document.getElementById("menu").style.display = "none";
+        function setupConn() {
+            conn.on('open', () => { online = true; if(!isHost) init(2, true); });
+            conn.on('data', data => {
+                if (isHost) p2.y = data.p2Y;
+                else {
+                    ball.x = data.bx; ball.y = data.by; ball.speed = data.bs;
+                    p1.y = data.p1Y; p1.h = data.p1H; p2.h = data.p2H;
+                    p1.score = data.s1; p2.score = data.s2; timeLeft = data.time;
+                    chaosMode = data.chaos; currentPowerUp = data.pw;
+                    p1Score.innerText = p1.score; p2Score.innerText = p2.score;
+                    if(timeLeft < 90) setGameMode('timed');
+                }
+            });
+        }
+
+        function init(m, on=false) {
+            mode = m; online = on; gameActive = true;
+            document.querySelectorAll('.overlay').forEach(o => o.style.display='none');
             document.getElementById("ui-header").style.opacity = "1";
-            if (mode === 2) {
-                document.getElementById('aiTitle').style.display = 'none';
-                document.getElementById('aiControls').style.display = 'none';
-                document.getElementById('p1ControlsUI').style.display = 'none';
-                p1Keys = { up: 'KeyW', down: 'KeyS', label: 'WASD' };
-            }
-            setDiff(1); restartMatch(); loop();
+            if (online) document.getElementById('godControls').style.display = 'none';
+            restartMatch(); loop();
         }
 
-        function toggleP1Keybinds() {
-            p1Keys = (p1Keys.label === 'WASD') ? { up: 'ArrowUp', down: 'ArrowDown', label: 'ARROWS' } : { up: 'KeyW', down: 'KeyS', label: 'WASD' };
-            document.getElementById('btnP1Keys').innerText = 'Keys: ' + p1Keys.label;
-        }
-
-        function setDiff(d) {
-            difficulty = d;
-            for(let i=0; i<3; i++) document.getElementById('diff'+i).className = (i===d) ? 'diff-btn selected' : 'diff-btn';
-        }
-
-        function toggleOwen() {
-            owenMode = !owenMode;
-            p1.h = owenMode ? 500 : 100; p1.y = owenMode ? 0 : 200;
-            document.getElementById('owenBtnPause').classList.toggle('active', owenMode);
-        }
-
-        function toggleMichael() {
-            michaelMode = !michaelMode;
-            p2.h = michaelMode ? 500 : 100; p2.y = michaelMode ? 0 : 200;
-            document.getElementById('michaelBtnPause').classList.toggle('active', michaelMode);
-        }
-
-        function restartMatch() {
-            p1.score = p2.score = 0; timeLeft = 90;
-            document.getElementById("p1Score").innerText = "0";
-            document.getElementById("p2Score").innerText = "0";
-            resetBall(1); if(paused) togglePause();
-        }
-
-        function setGameMode(type) {
-            gameModeType = type;
-            document.getElementById('modeClassic').className = (type === 'classic') ? 'active-btn' : '';
-            document.getElementById('modeTimed').className = (type === 'timed') ? 'active-btn' : '';
-            document.getElementById('timer-display').style.display = (type === 'timed') ? 'block' : 'none';
-        }
-
-        function togglePause() { if (gameActive && secretWindow.style.display !== 'flex') { paused = !paused; document.getElementById("pauseMenu").style.display = paused ? "flex" : "none"; } }
-
-        function resetBall(dir) {
-            ball.x = 400; ball.y = 250; ball.speed = START_SPEED;
-            ball.dx = dir * ball.speed; ball.dy = (Math.random() - 0.5) * 6;
+        function toggleChaos() { chaosMode = !chaosMode; document.getElementById('chaosBtn').innerText = `Chaos Mode: ${chaosMode?'ON':'OFF'}`; document.getElementById('chaosBtn').classList.toggle('active', chaosMode); }
+        function setGameMode(t) { gameModeType = t; document.getElementById('modeClassic').classList.toggle('active-btn', t==='classic'); document.getElementById('modeTimed').classList.toggle('active-btn', t==='timed'); document.getElementById('timer-display').style.display = (t==='timed'?'block':'none'); }
+        function setDiff(d) { difficulty = d; for(let i=0; i<3; i++) document.getElementById('diff'+i).className = (i===d)?'diff-btn selected':'diff-btn'; }
+        function toggleOwen() { owenMode = !owenMode; p1.h = owenMode?500:100; p1.y = 0; owenBtn.classList.toggle('active', owenMode); }
+        function toggleMichael() { michaelMode = !michaelMode; p2.h = michaelMode?500:100; p2.y = 0; michaelBtn.classList.toggle('active', michaelMode); }
+        function restartMatch() { p1.score = p2.score = 0; timeLeft = 90; resetBall(1); if(paused) togglePause(); }
+        function togglePause() { if(gameActive && secretWindow.style.display !== 'flex') { paused = !paused; document.getElementById("pauseMenu").style.display = paused ? "flex" : "none"; } }
+        function resetBall(dir) { ball.x = 400; ball.y = 250; ball.speed = START_SPEED; ball.dx = dir * ball.speed; ball.dy = (Math.random()-0.5)*6; }
+        
+        function maybeSpawnPowerUp() {
+            if (!isHost && online) return;
+            if (!gameActive || paused || !chaosMode || currentPowerUp) return;
+            currentPowerUp = { x: 385, y: 100 + Math.random() * 300, type: ['EXTEND', 'SHRINK'][Math.floor(Math.random()*2)] };
         }
 
         function update() {
             if (!gameActive || paused) return;
 
-            if (gameModeType === 'timed') {
-                timeLeft -= 1/60;
-                let m = Math.floor(timeLeft / 60), s = Math.floor(timeLeft % 60);
-                document.getElementById('timer-display').innerText = `${m}:${s.toString().padStart(2, '0')}`;
-                if (timeLeft <= 0) {
-                    gameActive = false;
-                    document.getElementById("winScreen").style.display = "flex";
-                    document.getElementById("winnerText").innerText = p1.score > p2.score ? "P1 WINS" : (p1.score < p2.score ? "P2 WINS" : "DRAW");
+            if (isHost || !online) {
+                if (gameModeType === 'timed') {
+                    timeLeft -= 1/60;
+                    if (timeLeft <= 0) { gameActive = false; document.getElementById("winScreen").style.display = "flex"; winnerText.innerText = p1.score > p2.score ? "P1 WINS" : "P2 WINS"; }
                 }
+
+                // Paddle Logic
+                const move = 1.7 * (ball.speed/START_SPEED), fric = 0.84;
+                if (!owenMode) {
+                    if (p1Stealth) p1.vy += (ball.y - (p1.y + p1.h/2)) * 0.14;
+                    else { if (keys['KeyW'] || keys['ArrowUp']) p1.vy -= move; if (keys['KeyS'] || keys['ArrowDown']) p1.vy += move; }
+                    p1.vy *= fric; p1.y += p1.vy;
+                }
+                if (!online) {
+                    if (mode === 1 && !michaelMode) { let ease = [0.02, 0.04, 0.15][difficulty]; p2.vy += (ball.y - (p2.y + p2.h/2)) * ease; }
+                    p2.vy *= fric; p2.y += p2.vy;
+                }
+
+                // Ball Physics
+                let nX = ball.x + ball.dx, nY = ball.y + ball.dy;
+                if (nY < B_RAD || nY > 500 - B_RAD) ball.dy *= -1;
+                let p = (ball.dx < 0) ? p1 : p2;
+                let coll = (ball.dx < 0) ? (ball.x >= p1.x + P_WIDTH && nX <= p1.x + P_WIDTH && nY >= p1.y && nY <= p1.y + p1.h) :
+                                          (ball.x <= p2.x && nX >= p2.x && nY >= p2.y && nY <= p2.y + p2.h);
+                if (coll) {
+                    ball.x = (ball.dx < 0) ? p1.x + P_WIDTH + B_RAD : p2.x - B_RAD;
+                    ball.speed = Math.min(ball.speed * SPEED_MULT, 35);
+                    let angle = (p.y + p.h/2 - ball.y) / (p.h/2) * (Math.PI/3);
+                    ball.dx = (ball.dx < 0 ? 1 : -1) * ball.speed * Math.cos(angle);
+                    ball.dy = -ball.speed * Math.sin(angle);
+                } else { ball.x = nX; ball.y = nY; }
+
+                if (ball.x < 0) { p2.score++; resetBall(1); } if (ball.x > 800) { p1.score++; resetBall(-1); }
+                p1Score.innerText = p1.score; p2Score.innerText = p2.score;
+
+                if (currentPowerUp && Math.hypot(ball.x - (currentPowerUp.x+15), ball.y - (currentPowerUp.y+15)) < 30) {
+                    let hitter = ball.dx > 0 ? p1 : p2; let opp = ball.dx > 0 ? p2 : p1;
+                    if (currentPowerUp.type === 'EXTEND') hitter.h = 200; else opp.h = 65;
+                    currentPowerUp = null; setTimeout(() => { if(!owenMode) p1.h = 100; if(!michaelMode) p2.h = 100; }, 8000);
+                }
+                if (online && conn) conn.send({ bx: ball.x, by: ball.y, bs: ball.speed, p1Y: p1.y, p1H: p1.h, p2H: p2.h, s1: p1.score, s2: p2.score, time: timeLeft, chaos: chaosMode, pw: currentPowerUp });
+            } else if (online) {
+                if (keys['KeyW'] || keys['ArrowUp']) p2.y -= 5; if (keys['KeyS'] || keys['ArrowDown']) p2.y += 5;
+                conn.send({ p2Y: p2.y });
             }
 
-            const speedFactor = ball.speed / START_SPEED;
-            const move = 1.7 * speedFactor; const fric = 0.84;
-
-            // Player 1 Movement
-            if (!owenMode) {
-                if (p1Stealth) p1.vy += (ball.y - (p1.y + p1.h/2)) * 0.14;
-                else {
-                    if (keys[p1Keys.up]) p1.vy -= move;
-                    if (keys[p1Keys.down]) p1.vy += move;
-                }
-                p1.vy *= fric; p1.y += p1.vy;
-            }
-
-            // Player 2 Movement
-            if (!michaelMode) {
-                if (p2Stealth) p2.vy += (ball.y - (p2.y + p2.h/2)) * 0.14;
-                else if (mode === 2) {
-                    if (keys['ArrowUp']) p2.vy -= move;
-                    if (keys['ArrowDown']) p2.vy += move;
-                } else {
-                    let ease = [0.02, 0.04, 0.15][difficulty], err = [80, 40, 2][difficulty];
-                    p2.vy += ((ball.y - p2.h/2) + (Math.sin(Date.now()*0.002)*err) - p2.y) * ease;
-                }
-                p2.vy *= fric; p2.y += p2.vy;
-            }
-
-            [p1, p2].forEach(p => { if (p.y < 0) p.y = 0; if (p.y > 500 - p.h) p.y = 500 - p.h; p.trail.push({y: p.y, h: p.h}); if (p.trail.length > 6) p.trail.shift(); p.pulse *= 0.9; });
-
-            let nX = ball.x + ball.dx, nY = ball.y + ball.dy;
-            if (nY < B_RAD || nY > 500 - B_RAD) { ball.dy *= -1; shake = 2; }
+            [p1, p2].forEach(p => { if (p.y < 0) p.y = 0; if (p.y > 500 - p.h) p.y = 500 - p.h; p.trail.push({y: p.y, h: p.h}); if (p.trail.length > 5) p.trail.shift(); });
+            ball.trail.push({x: ball.x, y: ball.y, c: `hsl(${180 - (Math.min(ball.speed/22, 1)*180)}, 100%, 60%)`});
+            if (ball.trail.length > 15) ball.trail.shift();
             
-            let coll = (ball.dx < 0) ? (ball.x >= p1.x + P_WIDTH && nX <= p1.x + P_WIDTH && nY >= p1.y && nY <= p1.y + p1.h) :
-                                      (ball.x <= p2.x && nX >= p2.x && nY >= p2.y && nY <= p2.y + p2.h);
-            if (coll) {
-                ball.x = (ball.dx < 0) ? p1.x + P_WIDTH + B_RAD : p2.x - B_RAD;
-                ball.speed = Math.min(ball.speed * ((owenMode || michaelMode) ? GOD_SPEED_MULT : SPEED_MULT), 40);
-                let angle = ((p1.y + p1.h/2) - ball.y) / (p1.h/2) * (Math.PI/3);
-                if (ball.dx > 0) angle = ((p2.y + p2.h/2) - ball.y) / (p2.h/2) * (Math.PI/3);
-                ball.dx = ((ball.x < 400) ? 1 : -1) * ball.speed * Math.cos(angle);
-                ball.dy = -ball.speed * Math.sin(angle);
-                (ball.dx > 0 ? p1 : p2).pulse = 1; shake = ball.speed/4;
-            } else { ball.x = nX; ball.y = nY; }
-
-            if (ball.x < 0) score(p2); if (ball.x > 800) score(p1);
-            ball.trail.push({x: ball.x, y: ball.y, c: `hsl(${180 - (Math.min(ball.speed/25, 1)*180)}, 100%, 60%)`});
-            if (ball.trail.length > 20) ball.trail.shift();
-            if (shake > 0) shake *= 0.9;
+            let m = Math.floor(timeLeft/60), s = Math.floor(timeLeft%60);
+            document.getElementById('timer-display').innerText = `${m}:${s.toString().padStart(2,'0')}`;
         }
 
-        function score(winner) {
-            winner.score++;
-            document.getElementById("p1Score").innerText = p1.score;
-            document.getElementById("p2Score").innerText = p2.score;
-            if (gameModeType === 'classic' && winner.score >= WIN_SCORE) {
-                gameActive = false;
-                document.getElementById("winScreen").style.display = "flex";
-                document.getElementById("winnerText").innerText = (winner === p1 ? "P1" : "P2") + " WINS";
-            } else { resetBall(winner === p1 ? -1 : 1); }
-        }
+        function openAdmin() { paused = true; document.getElementById('secretWindow').style.display='flex'; }
+        function closeAdmin() { document.getElementById('secretWindow').style.display='none'; paused=false; }
+        function checkAdmin() { if (adminPass.value === "dieh0neydie") cheats.style.display='block'; }
+        function applyCheats() { p1.score=parseInt(chP1.value); p2.score=parseInt(chP2.value); timeLeft=parseInt(chTime.value); closeAdmin(); }
 
         function loop() { update(); draw(); requestAnimationFrame(loop); }
 
         function draw() {
-            ctx.clearRect(0,0, 800, 500); ctx.save();
-            if (shake > 0.5) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
-            ctx.strokeStyle = "rgba(255,255,255,0.1)"; ctx.setLineDash([10, 15]); ctx.strokeRect(400, 0, 0, 500);
-            ball.trail.forEach((t, i) => { ctx.fillStyle = t.c; ctx.globalAlpha = i/40; ctx.beginPath(); ctx.arc(t.x, t.y, B_RAD*(i/20), 0, Math.PI*2); ctx.fill(); });
-            ctx.globalAlpha = 1; [p1, p2].forEach(p => {
+            ctx.clearRect(0,0, 800, 500);
+            ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.setLineDash([10, 15]); ctx.strokeRect(400, 0, 0, 500);
+            ball.trail.forEach((t, i) => { ctx.fillStyle = t.c; ctx.globalAlpha = i/40; ctx.beginPath(); ctx.arc(t.x, t.y, B_RAD*(i/15), 0, Math.PI*2); ctx.fill(); });
+            ctx.globalAlpha = 1; if(currentPowerUp) { ctx.fillStyle = currentPowerUp.type==='EXTEND'?'#0f0':'#f0f'; ctx.fillRect(currentPowerUp.x, currentPowerUp.y, 30, 30); }
+            [p1, p2].forEach(p => {
                 ctx.fillStyle = p.color; p.trail.forEach((t, i) => { ctx.globalAlpha = i/20; ctx.fillRect(p.x, t.y, P_WIDTH, t.h); });
-                ctx.globalAlpha = 1; let s = 1 + (p.pulse * 0.2);
-                ctx.fillRect(p.x - (P_WIDTH*(s-1))/2, p.y - (p.h*(s-1))/2, P_WIDTH * s, p.h * s);
+                ctx.globalAlpha = 1; ctx.fillRect(p.x, p.y, P_WIDTH, p.h);
             });
-            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ball.x, ball.y, B_RAD, 0, Math.PI*2); ctx.fill(); ctx.restore();
+            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ball.x, ball.y, B_RAD, 0, Math.PI*2); ctx.fill();
         }
     </script>
 </body>
