@@ -2,268 +2,886 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PONG: Maybe You'll Win</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --primary: #00ffcc; --secondary: #ff0066; --owen: #ff00ff; --michael: #0066ff; --bg: #0b0b0e; }
-        body { margin: 0; background: var(--bg); display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
-        #game-wrapper { position: relative; width: 95vw; height: calc(95vw * (500 / 800)); max-width: 800px; max-height: 500px; display: flex; flex-direction: column; }
-        #ui-header { position: absolute; top: -70px; width: 100%; display: flex; justify-content: space-around; align-items: center; font-size: clamp(20px, 4vw, 50px); font-weight: 800; z-index: 5; }
-        #timer-display { font-family: monospace; color: #ffcc00; font-size: 0.7em; background: rgba(255,255,255,0.05); padding: 5px 15px; border-radius: 20px; display: none; }
-        canvas { background: #0e0e12; width: 100%; height: 100%; border-radius: 8px; border: 2px solid #222; box-shadow: 0 0 50px rgba(0,0,0,0.8); display: block; }
-        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 15, 0.96); backdrop-filter: blur(12px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; text-align: center; border-radius: 8px; }
-        h1 { font-size: clamp(30px, 8vw, 70px); margin: 0; letter-spacing: 15px; }
-        .tagline { color: var(--primary); font-size: clamp(12px, 2vw, 18px); margin-bottom: 20px; font-style: italic; }
-        .btn-group { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+        :root { --primary: #00ffcc; --secondary: #ff0066; --owen: #ff00ff; --michael: #0066ff; --bg: #0b0b0e; --accent: #ffcc00; }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0; background: var(--bg); color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            overflow: hidden; overscroll-behavior: none;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+
+        #game-wrapper { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+        /* Width is capped by the available HEIGHT too, so the court never overflows
+           a short/landscape phone screen. 1.6 = the 800x500 aspect ratio. */
+        #stage {
+            position: relative;
+            width: min(96vw, 900px, calc((100vh - 120px) * 1.6));
+            width: min(96vw, 900px, calc((100svh - 120px) * 1.6));
+            aspect-ratio: 8 / 5;
+        }
+
+        #ui-header {
+            visibility: hidden;
+            width: min(96vw, 900px, calc((100vh - 120px) * 1.6));
+            width: min(96vw, 900px, calc((100svh - 120px) * 1.6));
+            display: flex; justify-content: space-around; align-items: center;
+            font-size: clamp(22px, 5vw, 46px); font-weight: 800;
+        }
+        #timer-display {
+            font-family: monospace; color: var(--accent); font-size: 0.55em;
+            background: rgba(255,255,255,0.06); padding: 4px 14px; border-radius: 20px; display: none;
+        }
+
+        canvas {
+            background: #0e0e12; width: 100%; height: 100%; display: block;
+            border-radius: 8px; border: 2px solid #222;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            touch-action: none; /* we handle all pointer input ourselves */
+        }
+
+        #pauseTab {
+            position: absolute; top: 8px; right: 8px; z-index: 15; display: none;
+            width: 44px; height: 44px; padding: 0; font-size: 16px; line-height: 1;
+            background: rgba(0,0,0,0.45); border: 1px solid #444; border-radius: 8px;
+            color: #fff; cursor: pointer;
+        }
+
+        .overlay {
+            position: absolute; inset: 0; z-index: 20;
+            background: rgba(10, 10, 15, 0.96); backdrop-filter: blur(12px);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; border-radius: 8px;
+            padding: 12px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+        }
+        h1 { font-size: clamp(26px, 7vw, 64px); margin: 0; letter-spacing: clamp(6px, 2vw, 15px); }
+        h2 { font-size: clamp(20px, 5vw, 36px); margin: 6px 0; }
+        h3 { margin: 10px 0 4px; font-size: 10px; color: #888; letter-spacing: 2px; }
+        .tagline { color: var(--primary); font-size: clamp(11px, 2.2vw, 18px); margin-bottom: 14px; font-style: italic; }
+        .hint { font-size: clamp(10px, 2vw, 13px); color: #777; margin-top: 12px; line-height: 1.5; }
+
+        .btn-group { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; }
         .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-        input { background: #000; border: 1px solid #444; color: var(--primary); padding: 8px; border-radius: 4px; text-align: center; outline: none; }
-        button { padding: 8px 18px; font-size: 12px; background: transparent; color: #fff; border: 2px solid #fff; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase; transition: 0.2s; }
+
+        /* 44px min target = comfortably tappable, incl. for less precise hands */
+        button {
+            min-height: 44px; min-width: 44px; padding: 10px 18px;
+            font-size: 13px; font-weight: bold; text-transform: uppercase;
+            background: transparent; color: #fff; border: 2px solid #fff; border-radius: 6px;
+            cursor: pointer; transition: 0.15s; touch-action: manipulation;
+        }
         button:hover { background: #fff; color: #000; }
-        .active-btn { border-color: #ffcc00; color: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
-        .btn-owen.active { background: var(--owen); color: white; }
-        .btn-michael.active { background: var(--michael); color: white; }
-        .diff-btn.selected { border-color: var(--primary); color: var(--primary); }
-        h3 { margin: 10px 0 2px; font-size: 10px; color: #666; letter-spacing: 2px; }
-        #touch-track { position: absolute; left: -45px; top: 0; width: 40px; height: 100%; background: rgba(0, 255, 204, 0.1); border-left: 2px solid var(--primary); border-radius: 4px; z-index: 10; }
+        button:disabled { opacity: 0.4; cursor: default; }
+        button:disabled:hover { background: transparent; color: #fff; }
+        button.accent { border-color: var(--accent); color: var(--accent); }
+        button.subtle { border-color: #444; color: #bbb; }
+
+        /* 16px stops iOS Safari auto-zooming when the field is focused */
+        input {
+            min-height: 44px; font-size: 16px; background: #000; border: 1px solid #444;
+            color: var(--primary); padding: 8px 12px; border-radius: 6px; text-align: center; outline: none;
+        }
+
+        .active-btn { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+        .diff-btn.selected { border-color: var(--primary); color: var(--primary); box-shadow: 0 0 10px rgba(0,255,204,0.4); }
+        .btn-owen.active { background: var(--owen); border-color: var(--owen); color: #fff; }
+        .btn-michael.active { background: var(--michael); border-color: var(--michael); color: #fff; }
+        .toggle.active { border-color: var(--accent); color: var(--accent); }
+        .code { color: #fff; font-size: 28px; letter-spacing: 6px; font-family: monospace; }
+
+        /* Range inputs need to escape the generic `input` styling above. */
+        input[type="range"] {
+            -webkit-appearance: none; appearance: none;
+            width: 180px; height: 44px; min-height: 44px;
+            padding: 0; background: transparent; border: none;
+            touch-action: none; cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: #333; }
+        input[type="range"]::-moz-range-track { height: 6px; border-radius: 3px; background: #333; }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 26px; height: 26px; margin-top: -10px; border-radius: 50%;
+            background: var(--primary); border: 2px solid var(--bg);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: var(--primary); border: 2px solid var(--bg);
+        }
+        .sens-row { align-items: center; gap: 12px; }
+        .sens-val { font-family: monospace; color: var(--primary); font-size: 14px; min-width: 44px; text-align: left; }
+
+        #rotate-hint { display: none; font-size: 11px; color: var(--accent); margin-top: 10px; }
+
+        /* On a portrait phone the court is short, so a menu confined to it would
+           be a cramped scrolling box. Give the overlays the whole viewport. */
+        @media (orientation: portrait) and (max-width: 820px) {
+            body.touch #rotate-hint { display: block; }   /* touch devices only, not a narrow desktop window */
+            .overlay { position: fixed; inset: 0; border-radius: 0; z-index: 30; }
+        }
     </style>
 </head>
 <body>
 
     <div id="game-wrapper">
-        <div id="touch-track"></div>
-        <div id="ui-header" style="opacity: 0;">
+        <div id="ui-header">
             <div id="p1Score" style="color: var(--primary)">0</div>
             <div id="timer-display">01:30</div>
             <div id="p2Score" style="color: var(--secondary)">0</div>
         </div>
 
-        <div id="menu" class="overlay">
-            <h1>PONG</h1>
-            <div class="tagline">Maybe you'll win</div>
-            <div class="btn-group">
-                <div class="row">
-                    <button onclick="init(1)">1 Player</button>
-                    <button onclick="init(2)">2 Players</button>
-                    <button onclick="showMultiMenu()" style="border-color: #ffcc00; color: #ffcc00;">Online</button>
-                </div>
-            </div>
-        </div>
+        <div id="stage">
+            <canvas id="pong" width="800" height="500"></canvas>
+            <button type="button" id="pauseTab" title="Pause" aria-label="Pause">||</button>
 
-        <div id="multiMenu" class="overlay" style="display: none;">
-            <h1>MULTIPLAYER</h1>
-            <div class="btn-group">
-                <button onclick="startMultiplayer(true)">Host Game</button>
-                <div class="row"><input type="text" id="joinId" placeholder="CODE"><button onclick="startMultiplayer(false)">Join</button></div>
-                <div id="statusMsg" style="font-size: 12px; color: #666; margin-top: 10px;">Connect to internet to play online.</div>
-                <button onclick="location.reload()" style="margin-top: 20px; border-color: #444;">Back</button>
-            </div>
-        </div>
-
-        <div id="pauseMenu" class="overlay" style="display: none;">
-            <h1>PAUSED</h1>
-            <div class="btn-group">
-                <button onclick="togglePause()">Resume</button>
-                <button onclick="restartMatch()">Restart</button>
-                <h3>Game Mode</h3>
-                <div class="row">
-                    <button id="modeClassic" class="active-btn" onclick="setGameMode('classic')">Classic</button>
-                    <button id="modeTimed" onclick="setGameMode('timed')">Timed</button>
-                </div>
-                <div id="godControls">
-                    <h3>God Modes</h3>
-                    <div class="row">
-                        <button id="owenBtn" class="btn-owen" onclick="toggleOwen()">Owen</button>
-                        <button id="michaelBtn" class="btn-michael" onclick="toggleMichael()">Michael</button>
+            <div id="menu" class="overlay">
+                <h1>PONG</h1>
+                <div class="tagline">Maybe you'll win</div>
+                <div class="btn-group">
+                    <div id="diffWrapMenu">
+                        <h3>Bot Difficulty</h3>
+                        <div class="row">
+                            <button type="button" class="diff-btn" data-d="0">Easy</button>
+                            <button type="button" class="diff-btn" data-d="1">Medium</button>
+                            <button type="button" class="diff-btn" data-d="2">Hard</button>
+                            <button type="button" class="diff-btn" data-d="3">Insane</button>
+                        </div>
                     </div>
+                    <h3>Sensitivity</h3>
+                    <div class="row sens-row">
+                        <input type="range" class="sens-slider" min="0.4" max="2.5" step="0.1" value="1"
+                               aria-label="Control sensitivity">
+                        <span class="sens-val">1.0x</span>
+                    </div>
+                    <div class="row" style="margin-top: 8px;">
+                        <button type="button" onclick="init(1)">1 Player</button>
+                        <button type="button" onclick="init(2)">2 Players</button>
+                        <button type="button" class="accent" onclick="showMultiMenu()">Online</button>
+                    </div>
+                    <div class="hint" id="controlsHint"></div>
+                    <div id="rotate-hint">Turn your phone sideways for a bigger court</div>
                 </div>
-                <h3>Extra</h3>
-                <button id="chaosBtn" class="btn-variant" onclick="toggleChaos()">Chaos Mode: OFF</button>
-                <button onclick="location.reload()" style="margin-top:15px; border-color: #444;">Quit</button>
+            </div>
+
+            <div id="multiMenu" class="overlay" style="display: none;">
+                <h1>ONLINE</h1>
+                <div class="btn-group">
+                    <button type="button" id="hostBtn" onclick="startMultiplayer(true)">Host Game</button>
+                    <div class="row">
+                        <input type="text" id="joinId" placeholder="CODE" inputmode="numeric" autocomplete="off"
+                               maxlength="4" style="width: 110px;">
+                        <button type="button" id="joinBtn" onclick="startMultiplayer(false)">Join</button>
+                    </div>
+                    <div id="statusMsg" class="hint">Both players need an internet connection.</div>
+                    <button type="button" class="subtle" style="margin-top: 16px;" onclick="returnToMenu()">Back</button>
+                </div>
+            </div>
+
+            <div id="pauseMenu" class="overlay" style="display: none;">
+                <h1>PAUSED</h1>
+                <div class="btn-group">
+                    <div class="row">
+                        <button type="button" onclick="togglePause()">Resume</button>
+                        <button type="button" onclick="restartMatch()">Restart</button>
+                    </div>
+                    <h3>Game Mode</h3>
+                    <div class="row">
+                        <button type="button" id="modeClassic" class="active-btn" onclick="setGameMode('classic')">First to 10</button>
+                        <button type="button" id="modeTimed" onclick="setGameMode('timed')">Timed</button>
+                    </div>
+                    <div id="diffWrapPause">
+                        <h3>Bot Difficulty</h3>
+                        <div class="row">
+                            <button type="button" class="diff-btn" data-d="0">Easy</button>
+                            <button type="button" class="diff-btn" data-d="1">Medium</button>
+                            <button type="button" class="diff-btn" data-d="2">Hard</button>
+                            <button type="button" class="diff-btn" data-d="3">Insane</button>
+                        </div>
+                    </div>
+                    <div id="godControls">
+                        <h3>God Modes</h3>
+                        <div class="row">
+                            <button type="button" id="owenBtn" class="btn-owen" onclick="toggleOwen()">Owen</button>
+                            <button type="button" id="michaelBtn" class="btn-michael" onclick="toggleMichael()">Michael</button>
+                        </div>
+                    </div>
+                    <h3>Sensitivity</h3>
+                    <div class="row sens-row">
+                        <input type="range" class="sens-slider" min="0.4" max="2.5" step="0.1" value="1"
+                               aria-label="Control sensitivity">
+                        <span class="sens-val">1.0x</span>
+                    </div>
+                    <h3>Extra</h3>
+                    <button type="button" id="chaosBtn" class="toggle" onclick="toggleChaos()">Chaos Mode: OFF</button>
+                    <button type="button" class="subtle" style="margin-top: 14px;" onclick="returnToMenu()">Quit</button>
+                </div>
+            </div>
+
+            <div id="secretWindow" class="overlay" style="display: none;">
+                <h2 style="color: var(--accent);">ADMIN TERMINAL</h2>
+                <input type="password" id="adminPass" placeholder="PASSWORD" autocomplete="off">
+                <div id="cheats" style="display: none; margin-top: 10px;">
+                    <div class="row">
+                        <input type="number" id="chP1" placeholder="P1" style="width: 80px;">
+                        <input type="number" id="chP2" placeholder="P2" style="width: 80px;">
+                    </div>
+                    <div class="row" style="margin-top: 8px;">
+                        <input type="number" id="chTime" placeholder="Timer (s)" style="width: 130px;">
+                    </div>
+                    <h3>Auto-Play</h3>
+                    <div class="row">
+                        <button type="button" id="stealth1Btn" class="toggle" onclick="toggleStealth(1)">P1: OFF</button>
+                        <button type="button" id="stealth2Btn" class="toggle" onclick="toggleStealth(2)">P2: OFF</button>
+                    </div>
+                    <button type="button" style="margin-top: 12px;" onclick="applyCheats()">Apply</button>
+                </div>
+                <div class="row" style="margin-top: 12px;">
+                    <button type="button" onclick="checkAdmin()">Unlock</button>
+                    <button type="button" class="subtle" onclick="closeAdmin()">Close</button>
+                </div>
+            </div>
+
+            <div id="winScreen" class="overlay" style="display: none;">
+                <h2 id="winnerText">WINNER</h2>
+                <div class="row" style="margin-top: 14px;">
+                    <button type="button" id="againBtn" onclick="restartMatch()">Play Again</button>
+                    <button type="button" class="subtle" onclick="returnToMenu()">Menu</button>
+                </div>
             </div>
         </div>
-
-        <div id="secretWindow" class="overlay" style="display: none;">
-            <h2 style="color: #ffcc00;">ADMIN TERMINAL</h2>
-            <input type="password" id="adminPass" placeholder="PASSWORD">
-            <div id="cheats" style="display: none;">
-                <div class="row">
-                    <input type="number" id="chP1" placeholder="P1" style="width: 50px;">
-                    <input type="number" id="chP2" placeholder="P2" style="width: 50px;">
-                </div>
-                <input type="number" id="chTime" placeholder="Timer (sec)" style="width: 100px;">
-                <button onclick="applyCheats()" style="display: block; margin-top: 10px;">Apply</button>
-            </div>
-            <button onclick="checkAdmin()" style="margin-top: 10px;">Unlock</button>
-            <button onclick="closeAdmin()">Close</button>
-        </div>
-
-        <div id="winScreen" class="overlay" style="display: none;">
-            <h2 id="winnerText" style="font-size: 40px;">WINNER</h2>
-            <button onclick="location.reload()">Return</button>
-        </div>
-
-        <canvas id="pong" width="800" height="500"></canvas>
     </div>
 
     <script>
         const canvas = document.getElementById("pong"), ctx = canvas.getContext("2d");
-        const P_WIDTH = 12, B_RAD = 8, WIN_SCORE = 10;
-        const START_SPEED = 6.5, MAX_SPEED = 22, SPEED_MULT = 1.04, GOD_SPEED_MULT = 1.15;
+        const el = id => document.getElementById(id);
 
-        let gameActive = false, paused = false, mode = 1, shake = 0, chaosMode = false;
-        let gameModeType = 'classic', timeLeft = 90;
+        const W = 800, H = 500;
+        const P_WIDTH = 12, B_RAD = 8, WIN_SCORE = 10, PADDLE_H = 100;
+        const START_SPEED = 6.5, MAX_SPEED = 35, SPEED_MULT = 1.04;
+        const STEP_MS = 1000 / 60;
+        const PEER_PREFIX = "princesspong-";
+
+        // cap     = top paddle speed, so a weak bot physically cannot keep up
+        // accel   = how quickly it reaches that speed
+        // err     = aim error in px, re-rolled each hit, so misses look human
+        // blunder = chance of an outright whiff; lets a sharp bot stay beatable
+        //           without making every one of its shots look sloppy
+        // predict = reads the ball's bounce path instead of just chasing it
+        // reactX  = how far across the court the ball must be before it reacts
+        const DIFFS = [
+            { name: 'Easy',   cap:  4.2, accel: 0.12, err: 70, blunder: 0.00, predict: false, reactX: 520 },
+            { name: 'Medium', cap:  7.0, accel: 0.22, err: 38, blunder: 0.00, predict: false, reactX: 380 },
+            { name: 'Hard',   cap: 11.0, accel: 0.40, err: 16, blunder: 0.02, predict: true,  reactX: 200 },
+            { name: 'Insane', cap: 19.0, accel: 0.75, err: 14, blunder: 0.01, predict: true,  reactX: 0   }
+        ];
+
+        let gameActive = false, paused = false, mode = 1, chaosMode = false;
+        let gameModeType = 'classic', timeLeft = 90, matchOver = false;
         let owenMode = false, michaelMode = false, p1Stealth = false, p2Stealth = false;
-        let difficulty = 1, isHost = false, online = false, conn, peer;
-        const keys = {}, particles = [];
-        
-        const p1 = { x: 20, y: 200, vy: 0, h: 100, score: 0, color: '#00ffcc', trail: [] };
-        const p2 = { x: 768, y: 200, vy: 0, h: 100, score: 0, color: '#ff0066', trail: [] };
+        let difficulty = 1, isHost = false, online = false, conn = null, peer = null;
+        let netStarted = false, hostRetries = 0, joinTimer = null;
+        let rafId = null, lastTs = 0, acc = 0, tick = 0, aiErr = 0;
+        let sensitivity = 1;
+
+        const keys = {};
+        const isTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+        const p1 = { x: 20,  y: 200, vy: 0, h: PADDLE_H, score: 0, color: '#00ffcc', trail: [], buffUntil: 0 };
+        const p2 = { x: W - 20 - P_WIDTH, y: 200, vy: 0, h: PADDLE_H, score: 0, color: '#ff0066', trail: [], buffUntil: 0 };
         const ball = { x: 400, y: 250, dx: 0, dy: 0, speed: START_SPEED, trail: [] };
         let currentPowerUp = null;
 
+        const isLocal2P = () => mode === 2 && !online;
+        const baseH = p => (p === p1 ? (owenMode ? H : PADDLE_H) : (michaelMode ? H : PADDLE_H));
+        const myPaddle = () => online ? (isHost ? p1 : p2) : p1;
+
+        /* ---------- Keyboard ---------- */
         window.addEventListener("keydown", e => {
+            if (e.code === "Escape") { e.preventDefault(); togglePause(); }
             keys[e.code] = true;
-            if (e.code === "Escape") togglePause();
             if (keys['KeyW'] && keys['KeyP'] && !online) openAdmin();
-            if (e.shiftKey && e.code === "Digit1") p1Stealth = !p1Stealth;
-            if (e.shiftKey && e.code === "Digit2") p2Stealth = !p2Stealth;
+            if (e.shiftKey && e.code === "Digit1") toggleStealth(1);
+            if (e.shiftKey && e.code === "Digit2") toggleStealth(2);
+            if (gameActive && ['ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
         });
-        window.addEventListener("keyup", e => keys[e.code] = false);
+        window.addEventListener("keyup", e => { keys[e.code] = false; });
+        window.addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 
-        document.getElementById("touch-track").addEventListener("touchmove", e => {
-            if (!gameActive || paused) return;
+        /* ---------- Pointer / touch ----------
+           Multi-pointer: two fingers can drag two paddles at once. On a local
+           2-player game the court is split down the middle -- left half drives
+           P1, right half drives P2. Mouse drag works the same way on desktop. */
+        const pointers = new Map();
+
+        function paddleForPointer(clientX, rect) {
+            if (online) return myPaddle();
+            if (isLocal2P()) return (clientX - rect.left) < rect.width / 2 ? p1 : p2;
+            return p1;
+        }
+        /* Relative drag, scaled by sensitivity. Absolute finger->paddle mapping
+           would ignore the slider (or cost you reach at low settings); dragging
+           relative to where you grabbed keeps the whole court reachable at any
+           sensitivity. The anchor is reset at the rails so there is no dead zone
+           after you overshoot. */
+        function applyPointer(e) {
+            const rec = pointers.get(e.pointerId);
+            if (!rec) return;
             const rect = canvas.getBoundingClientRect();
-            const touchY = e.touches[0].clientY - rect.top;
-            const logicalY = (touchY / rect.height) * 500;
-            if (!online || isHost) p1.y = logicalY - p1.h/2; else p2.y = logicalY - p2.h/2;
+            const dy = ((e.clientY - rec.startY) / rect.height) * H;
+            let target = rec.startPaddleY + dy * sensitivity;
+            const maxY = H - rec.p.h;
+            if (target < 0)         { target = 0;    rec.startY = e.clientY; rec.startPaddleY = 0; }
+            else if (target > maxY) { target = maxY; rec.startY = e.clientY; rec.startPaddleY = maxY; }
+            rec.p.y = target;
+            rec.p.vy = 0;
+            e.preventDefault();
+        }
+        canvas.addEventListener('pointerdown', e => {
+            if (!gameActive || paused) return;
+            if (e.pointerType === 'mouse' && e.buttons !== 1) return;
+            const p = paddleForPointer(e.clientX, canvas.getBoundingClientRect());
+            if (online && !isHost && p !== p2) return;
+            pointers.set(e.pointerId, { p, startY: e.clientY, startPaddleY: p.y });
+            try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+            e.preventDefault();
+        });
+        canvas.addEventListener('pointermove', applyPointer);
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+            canvas.addEventListener(ev, e => pointers.delete(e.pointerId)));
+
+        /* Admin terminal has no keyboard on a phone, so long-press the scoreboard. */
+        let pressTimer = null;
+        const header = el('ui-header');
+        header.addEventListener('pointerdown', () => {
+            clearTimeout(pressTimer);
+            pressTimer = setTimeout(() => { if (!online && gameActive) openAdmin(); }, 1200);
+        });
+        ['pointerup', 'pointercancel', 'pointerleave', 'pointermove'].forEach(ev =>
+            header.addEventListener(ev, () => clearTimeout(pressTimer)));
+
+        el('pauseTab').addEventListener('click', togglePause);
+        document.addEventListener('click', e => {
+            const b = e.target.closest('.diff-btn');
+            if (b) setDiff(+b.dataset.d);
+        });
+        document.addEventListener('input', e => {
+            if (e.target.classList.contains('sens-slider')) setSensitivity(e.target.value);
         });
 
-        function showMultiMenu() { document.getElementById('menu').style.display='none'; document.getElementById('multiMenu').style.display='flex'; }
-        
-        function startMultiplayer(host) {
-            document.getElementById('statusMsg').innerText = "Connecting...";
-            peer = new Peer(host ? Math.floor(1000 + Math.random()*9000).toString() : null);
-            peer.on('open', id => {
-                if(host) { isHost = true; document.getElementById('statusMsg').innerHTML = `CODE: <b style='color:white; font-size:24px;'>${id}</b><br>Give this to Player 2`; }
-                else { conn = peer.connect(document.getElementById('joinId').value); setupConn(); }
+        /* ---------- Menus & toggles ---------- */
+        function showMultiMenu() { el('menu').style.display = 'none'; el('multiMenu').style.display = 'flex'; }
+
+        function setSensitivity(v, persist = true) {
+            const n = parseFloat(v);
+            sensitivity = Math.min(2.5, Math.max(0.4, Number.isFinite(n) ? n : 1));
+            document.querySelectorAll('.sens-slider').forEach(s => {
+                if (parseFloat(s.value) !== sensitivity) s.value = sensitivity;
             });
-            peer.on('connection', c => { conn = c; isHost = true; setupConn(); init(2, true); });
+            document.querySelectorAll('.sens-val').forEach(e => e.textContent = sensitivity.toFixed(1) + 'x');
+            if (persist) { try { localStorage.setItem('pong-sens', sensitivity); } catch (e) {} }
         }
 
-        function setupConn() {
-            conn.on('open', () => { online = true; if(!isHost) init(2, true); });
-            conn.on('data', data => {
-                if (isHost) p2.y = data.p2Y;
-                else {
-                    ball.x = data.bx; ball.y = data.by; ball.speed = data.bs;
-                    p1.y = data.p1Y; p1.h = data.p1H; p2.h = data.p2H;
-                    p1.score = data.s1; p2.score = data.s2; timeLeft = data.time;
-                    chaosMode = data.chaos; currentPowerUp = data.pw;
-                    p1Score.innerText = p1.score; p2Score.innerText = p2.score;
-                    if(timeLeft < 90) setGameMode('timed');
-                }
-            });
+        function setDiff(d) {
+            difficulty = d;
+            document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('selected', +b.dataset.d === d));
+        }
+        function setGameMode(t) {
+            gameModeType = t;
+            el('modeClassic').classList.toggle('active-btn', t === 'classic');
+            el('modeTimed').classList.toggle('active-btn', t === 'timed');
+            el('timer-display').style.display = (t === 'timed' ? 'block' : 'none');
+        }
+        function toggleChaos() {
+            chaosMode = !chaosMode;
+            el('chaosBtn').innerText = `Chaos Mode: ${chaosMode ? 'ON' : 'OFF'}`;
+            el('chaosBtn').classList.toggle('active', chaosMode);
+            if (!chaosMode) currentPowerUp = null;
+        }
+        function toggleOwen() {
+            owenMode = !owenMode; p1.h = baseH(p1); p1.buffUntil = 0;
+            if (owenMode) p1.y = 0;
+            el('owenBtn').classList.toggle('active', owenMode);
+        }
+        function toggleMichael() {
+            michaelMode = !michaelMode; p2.h = baseH(p2); p2.buffUntil = 0;
+            if (michaelMode) p2.y = 0;
+            el('michaelBtn').classList.toggle('active', michaelMode);
+        }
+        function toggleStealth(which) {
+            if (which === 1) p1Stealth = !p1Stealth; else p2Stealth = !p2Stealth;
+            el('stealth1Btn').innerText = `P1: ${p1Stealth ? 'ON' : 'OFF'}`;
+            el('stealth2Btn').innerText = `P2: ${p2Stealth ? 'ON' : 'OFF'}`;
+            el('stealth1Btn').classList.toggle('active', p1Stealth);
+            el('stealth2Btn').classList.toggle('active', p2Stealth);
         }
 
-        function init(m, on=false) {
-            mode = m; online = on; gameActive = true;
-            document.querySelectorAll('.overlay').forEach(o => o.style.display='none');
-            document.getElementById("ui-header").style.opacity = "1";
-            if (online) document.getElementById('godControls').style.display = 'none';
-            restartMatch(); loop();
+        function togglePause() {
+            if (!gameActive || matchOver) return;
+            if (el('secretWindow').style.display === 'flex') return;
+            if (online && !isHost) return;   // only the host owns the simulation
+            paused = !paused;
+            el('pauseMenu').style.display = paused ? 'flex' : 'none';
         }
 
-        function toggleChaos() { chaosMode = !chaosMode; document.getElementById('chaosBtn').innerText = `Chaos Mode: ${chaosMode?'ON':'OFF'}`; document.getElementById('chaosBtn').classList.toggle('active', chaosMode); }
-        function setGameMode(t) { gameModeType = t; document.getElementById('modeClassic').classList.toggle('active-btn', t==='classic'); document.getElementById('modeTimed').classList.toggle('active-btn', t==='timed'); document.getElementById('timer-display').style.display = (t==='timed'?'block':'none'); }
-        function setDiff(d) { difficulty = d; for(let i=0; i<3; i++) document.getElementById('diff'+i).className = (i===d)?'diff-btn selected':'diff-btn'; }
-        function toggleOwen() { owenMode = !owenMode; p1.h = owenMode?500:100; p1.y = 0; owenBtn.classList.toggle('active', owenMode); }
-        function toggleMichael() { michaelMode = !michaelMode; p2.h = michaelMode?500:100; p2.y = 0; michaelBtn.classList.toggle('active', michaelMode); }
-        function restartMatch() { p1.score = p2.score = 0; timeLeft = 90; resetBall(1); if(paused) togglePause(); }
-        function togglePause() { if(gameActive && secretWindow.style.display !== 'flex') { paused = !paused; document.getElementById("pauseMenu").style.display = paused ? "flex" : "none"; } }
-        function resetBall(dir) { ball.x = 400; ball.y = 250; ball.speed = START_SPEED; ball.dx = dir * ball.speed; ball.dy = (Math.random()-0.5)*6; }
-        
-        function maybeSpawnPowerUp() {
-            if (!isHost && online) return;
-            if (!gameActive || paused || !chaosMode || currentPowerUp) return;
-            currentPowerUp = { x: 385, y: 100 + Math.random() * 300, type: ['EXTEND', 'SHRINK'][Math.floor(Math.random()*2)] };
+        function refreshMenuVisibility() {
+            el('godControls').style.display = online ? 'none' : 'block';
+            el('diffWrapPause').style.display = (!online && mode === 1) ? 'block' : 'none';
+            el('againBtn').style.display = (online && !isHost) ? 'none' : 'inline-block';
         }
 
+        /* ---------- Match lifecycle ---------- */
+        function init(m, on = false) {
+            mode = m; online = on; matchOver = false;
+            document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
+            el('ui-header').style.visibility = 'visible';
+            el('pauseTab').style.display = (online && !isHost) ? 'none' : 'block';
+            refreshMenuVisibility();
+            restartMatch();
+            startLoop();
+        }
+
+        function restartMatch() {
+            p1.score = p2.score = 0;
+            timeLeft = 90; matchOver = false; gameActive = true;
+            currentPowerUp = null;
+            p1.buffUntil = p2.buffUntil = 0;
+            p1.h = baseH(p1); p2.h = baseH(p2);
+            p1.y = p2.y = (H - PADDLE_H) / 2; p1.vy = p2.vy = 0;
+            p1.trail.length = p2.trail.length = ball.trail.length = 0;
+            aiErr = 0;
+            el('winScreen').style.display = 'none';
+            resetBall(Math.random() < 0.5 ? 1 : -1);
+            if (paused) togglePause();
+            updateHUD();
+        }
+
+        function resetBall(dir) {
+            ball.x = W / 2; ball.y = H / 2; ball.speed = START_SPEED;
+            ball.dx = dir * ball.speed; ball.dy = (Math.random() - 0.5) * 6;
+        }
+
+        function endMatch(who) {
+            if (matchOver) return;
+            matchOver = true; gameActive = false; paused = false;
+            el('pauseMenu').style.display = 'none';
+            el('winnerText').innerText = who === 'DRAW' ? 'DRAW' : who + ' WINS';
+            el('winScreen').style.display = 'flex';
+            if (online && isHost) sendState(true, who);   // make sure the client hears about it
+        }
+
+        function checkWin() {
+            if (gameModeType !== 'classic') return;
+            if (p1.score >= WIN_SCORE) endMatch('P1');
+            else if (p2.score >= WIN_SCORE) endMatch('P2');
+        }
+
+        function returnToMenu() {
+            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+            teardownNet();
+            gameActive = false; paused = false; matchOver = false;
+            mode = 1; owenMode = michaelMode = false; p1Stealth = p2Stealth = false;
+            if (chaosMode) toggleChaos();
+            p1.h = p2.h = PADDLE_H; p1.score = p2.score = 0;
+            el('owenBtn').classList.remove('active'); el('michaelBtn').classList.remove('active');
+            toggleStealth(1); toggleStealth(1); // resync the labels without flipping state
+            setGameMode('classic');
+            document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
+            el('menu').style.display = 'flex';
+            el('ui-header').style.visibility = 'hidden';
+            el('pauseTab').style.display = 'none';
+            el('cheats').style.display = 'none';
+            el('adminPass').value = '';
+            updateHUD();
+        }
+
+        /* ---------- Fixed 60Hz timestep ----------
+           Physics used to run once per animation frame, so a 120Hz screen played
+           the game at double speed. Now the clock drives the steps, not the display. */
+        function startLoop() {
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            lastTs = 0; acc = 0;
+            rafId = requestAnimationFrame(loop);
+        }
+        function loop(ts) {
+            if (!lastTs) lastTs = ts;
+            acc += Math.min(ts - lastTs, 250);
+            lastTs = ts;
+            let steps = 0;
+            while (acc >= STEP_MS && steps < 5) { update(); acc -= STEP_MS; steps++; }
+            if (acc > STEP_MS * 5) acc = 0;
+            draw();
+            rafId = requestAnimationFrame(loop);
+        }
+
+        /* ---------- Simulation ---------- */
         function update() {
             if (!gameActive || paused) return;
+            tick++;
 
-            if (isHost || !online) {
-                if (gameModeType === 'timed') {
-                    timeLeft -= 1/60;
-                    if (timeLeft <= 0) { gameActive = false; document.getElementById("winScreen").style.display = "flex"; winnerText.innerText = p1.score > p2.score ? "P1 WINS" : "P2 WINS"; }
+            if (isHost || !online) hostUpdate(); else clientUpdate();
+
+            [p1, p2].forEach(p => {
+                if (p.y < 0) p.y = 0;
+                if (p.y > H - p.h) p.y = H - p.h;
+                p.trail.push({ y: p.y, h: p.h });
+                if (p.trail.length > 5) p.trail.shift();
+            });
+            ball.trail.push({ x: ball.x, y: ball.y, c: `hsl(${180 - (Math.min(ball.speed / MAX_SPEED, 1) * 180)}, 100%, 60%)` });
+            if (ball.trail.length > 15) ball.trail.shift();
+
+            updateHUD();
+        }
+
+        function hostUpdate() {
+            if (gameModeType === 'timed') {
+                timeLeft -= 1 / 60;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    endMatch(p1.score > p2.score ? 'P1' : p2.score > p1.score ? 'P2' : 'DRAW');
+                    return;
                 }
-
-                // Paddle Logic
-                const move = 1.7 * (ball.speed/START_SPEED), fric = 0.84;
-                if (!owenMode) {
-                    if (p1Stealth) p1.vy += (ball.y - (p1.y + p1.h/2)) * 0.14;
-                    else { if (keys['KeyW'] || keys['ArrowUp']) p1.vy -= move; if (keys['KeyS'] || keys['ArrowDown']) p1.vy += move; }
-                    p1.vy *= fric; p1.y += p1.vy;
-                }
-                if (!online) {
-                    if (mode === 1 && !michaelMode) { let ease = [0.02, 0.04, 0.15][difficulty]; p2.vy += (ball.y - (p2.y + p2.h/2)) * ease; }
-                    p2.vy *= fric; p2.y += p2.vy;
-                }
-
-                // Ball Physics
-                let nX = ball.x + ball.dx, nY = ball.y + ball.dy;
-                if (nY < B_RAD || nY > 500 - B_RAD) ball.dy *= -1;
-                let p = (ball.dx < 0) ? p1 : p2;
-                let coll = (ball.dx < 0) ? (ball.x >= p1.x + P_WIDTH && nX <= p1.x + P_WIDTH && nY >= p1.y && nY <= p1.y + p1.h) :
-                                          (ball.x <= p2.x && nX >= p2.x && nY >= p2.y && nY <= p2.y + p2.h);
-                if (coll) {
-                    ball.x = (ball.dx < 0) ? p1.x + P_WIDTH + B_RAD : p2.x - B_RAD;
-                    ball.speed = Math.min(ball.speed * SPEED_MULT, 35);
-                    let angle = (p.y + p.h/2 - ball.y) / (p.h/2) * (Math.PI/3);
-                    ball.dx = (ball.dx < 0 ? 1 : -1) * ball.speed * Math.cos(angle);
-                    ball.dy = -ball.speed * Math.sin(angle);
-                } else { ball.x = nX; ball.y = nY; }
-
-                if (ball.x < 0) { p2.score++; resetBall(1); } if (ball.x > 800) { p1.score++; resetBall(-1); }
-                p1Score.innerText = p1.score; p2Score.innerText = p2.score;
-
-                if (currentPowerUp && Math.hypot(ball.x - (currentPowerUp.x+15), ball.y - (currentPowerUp.y+15)) < 30) {
-                    let hitter = ball.dx > 0 ? p1 : p2; let opp = ball.dx > 0 ? p2 : p1;
-                    if (currentPowerUp.type === 'EXTEND') hitter.h = 200; else opp.h = 65;
-                    currentPowerUp = null; setTimeout(() => { if(!owenMode) p1.h = 100; if(!michaelMode) p2.h = 100; }, 8000);
-                }
-                if (online && conn) conn.send({ bx: ball.x, by: ball.y, bs: ball.speed, p1Y: p1.y, p1H: p1.h, p2H: p2.h, s1: p1.score, s2: p2.score, time: timeLeft, chaos: chaosMode, pw: currentPowerUp });
-            } else if (online) {
-                if (keys['KeyW'] || keys['ArrowUp']) p2.y -= 5; if (keys['KeyS'] || keys['ArrowDown']) p2.y += 5;
-                conn.send({ p2Y: p2.y });
             }
 
-            [p1, p2].forEach(p => { if (p.y < 0) p.y = 0; if (p.y > 500 - p.h) p.y = 500 - p.h; p.trail.push({y: p.y, h: p.h}); if (p.trail.length > 5) p.trail.shift(); });
-            ball.trail.push({x: ball.x, y: ball.y, c: `hsl(${180 - (Math.min(ball.speed/22, 1)*180)}, 100%, 60%)`});
-            if (ball.trail.length > 15) ball.trail.shift();
-            
-            let m = Math.floor(timeLeft/60), s = Math.floor(timeLeft%60);
-            document.getElementById('timer-display').innerText = `${m}:${s.toString().padStart(2,'0')}`;
-        }
-
-        function openAdmin() { paused = true; document.getElementById('secretWindow').style.display='flex'; }
-        function closeAdmin() { document.getElementById('secretWindow').style.display='none'; paused=false; }
-        function checkAdmin() { if (adminPass.value === "dieh0neydie") cheats.style.display='block'; }
-        function applyCheats() { p1.score=parseInt(chP1.value); p2.score=parseInt(chP2.value); timeLeft=parseInt(chTime.value); closeAdmin(); }
-
-        function loop() { update(); draw(); requestAnimationFrame(loop); }
-
-        function draw() {
-            ctx.clearRect(0,0, 800, 500);
-            ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.setLineDash([10, 15]); ctx.strokeRect(400, 0, 0, 500);
-            ball.trail.forEach((t, i) => { ctx.fillStyle = t.c; ctx.globalAlpha = i/40; ctx.beginPath(); ctx.arc(t.x, t.y, B_RAD*(i/15), 0, Math.PI*2); ctx.fill(); });
-            ctx.globalAlpha = 1; if(currentPowerUp) { ctx.fillStyle = currentPowerUp.type==='EXTEND'?'#0f0':'#f0f'; ctx.fillRect(currentPowerUp.x, currentPowerUp.y, 30, 30); }
             [p1, p2].forEach(p => {
-                ctx.fillStyle = p.color; p.trail.forEach((t, i) => { ctx.globalAlpha = i/20; ctx.fillRect(p.x, t.y, P_WIDTH, t.h); });
-                ctx.globalAlpha = 1; ctx.fillRect(p.x, p.y, P_WIDTH, p.h);
+                if (p.buffUntil && tick > p.buffUntil) { p.h = baseH(p); p.buffUntil = 0; }
             });
-            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ball.x, ball.y, B_RAD, 0, Math.PI*2); ctx.fill();
+
+            const move = 1.7 * sensitivity * (ball.speed / START_SPEED), fric = 0.84;
+
+            // --- Player 1 (W/S; also the arrows when P2 isn't using them) ---
+            if (!owenMode) {
+                if (p1Stealth) p1.vy += (ball.y - (p1.y + p1.h / 2)) * 0.14;
+                else {
+                    const alsoArrows = !isLocal2P();
+                    if (keys['KeyW'] || (alsoArrows && keys['ArrowUp']))   p1.vy -= move;
+                    if (keys['KeyS'] || (alsoArrows && keys['ArrowDown'])) p1.vy += move;
+                }
+                p1.vy *= fric; p1.y += p1.vy;
+            }
+
+            // --- Player 2: human on the arrows in local 2P, otherwise the bot ---
+            if (!online && !michaelMode) {
+                if (p2Stealth) {
+                    p2.vy += (ball.y - (p2.y + p2.h / 2)) * 0.14;
+                    p2.vy *= fric; p2.y += p2.vy;
+                } else if (isLocal2P()) {
+                    if (keys['ArrowUp'])   p2.vy -= move;
+                    if (keys['ArrowDown']) p2.vy += move;
+                    p2.vy *= fric; p2.y += p2.vy;
+                } else {
+                    runBot();
+                }
+            }
+
+            // --- Ball ---
+            let nX = ball.x + ball.dx, nY = ball.y + ball.dy;
+
+            // Reflect the POSITION too, and only when actually heading into the wall,
+            // otherwise the ball renders outside the court for a frame at high speed.
+            if (nY < B_RAD && ball.dy < 0) { nY = 2 * B_RAD - nY; ball.dy *= -1; }
+            else if (nY > H - B_RAD && ball.dy > 0) { nY = 2 * (H - B_RAD) - nY; ball.dy *= -1; }
+
+            const p = (ball.dx < 0) ? p1 : p2;
+            const coll = (ball.dx < 0)
+                ? (ball.x >= p1.x + P_WIDTH && nX <= p1.x + P_WIDTH && nY >= p1.y && nY <= p1.y + p1.h)
+                : (ball.x <= p2.x && nX >= p2.x && nY >= p2.y && nY <= p2.y + p2.h);
+
+            if (coll) {
+                ball.y = nY;
+                ball.x = (ball.dx < 0) ? p1.x + P_WIDTH + B_RAD : p2.x - B_RAD;
+                ball.speed = Math.min(ball.speed * SPEED_MULT, MAX_SPEED);
+                const angle = (p.y + p.h / 2 - ball.y) / (p.h / 2) * (Math.PI / 3);
+                ball.dx = (ball.dx < 0 ? 1 : -1) * ball.speed * Math.cos(angle);
+                ball.dy = -ball.speed * Math.sin(angle);
+                const aid = DIFFS[difficulty];
+                aiErr = (Math.random() - 0.5) * 2 * aid.err;
+                if (Math.random() < aid.blunder) aiErr += (Math.random() < 0.5 ? -1 : 1) * (60 + Math.random() * 60);
+            } else {
+                ball.x = nX; ball.y = nY;
+            }
+
+            if (ball.x < 0)      { p2.score++; resetBall(1);  checkWin(); }
+            else if (ball.x > W) { p1.score++; resetBall(-1); checkWin(); }
+            if (matchOver) return;
+
+            maybeSpawnPowerUp();
+            if (currentPowerUp && Math.hypot(ball.x - (currentPowerUp.x + 15), ball.y - (currentPowerUp.y + 15)) < 30) {
+                const hitter = ball.dx > 0 ? p1 : p2, opp = ball.dx > 0 ? p2 : p1;
+                const godly = t => (t === p1 && owenMode) || (t === p2 && michaelMode);
+                if (currentPowerUp.type === 'EXTEND') {
+                    if (!godly(hitter)) { hitter.h = 200; hitter.buffUntil = tick + 8 * 60; }
+                } else {
+                    if (!godly(opp)) { opp.h = 65; opp.buffUntil = tick + 8 * 60; }
+                }
+                currentPowerUp = null;
+            }
+
+            sendState(false, null);
         }
+
+        /* The bot aims at a target with a capped, smoothly-approached velocity.
+           A plain spring (vy += error * gain) overshoots and jitters once the gain
+           is high, which made a "harder" bot play worse than an easier one. */
+        function runBot() {
+            const d = DIFFS[difficulty];
+            const centre = p2.y + p2.h / 2;
+            const target = (ball.dx <= 0 || ball.x < d.reactX)
+                ? H / 2                                        // ball going away: recentre
+                : (d.predict ? predictBallY() : ball.y) + aiErr;
+
+            const desired = Math.max(-d.cap, Math.min(d.cap, (target - centre) * 0.25));
+            p2.vy += (desired - p2.vy) * d.accel;
+            p2.y += p2.vy;
+        }
+
+        /* Where the ball will cross the bot's goal line, bounces included. */
+        function predictBallY() {
+            let x = ball.x, y = ball.y, dx = ball.dx, dy = ball.dy, guard = 0;
+            while (x < p2.x && guard++ < 400) {
+                x += dx; y += dy;
+                if (y < B_RAD && dy < 0) { y = 2 * B_RAD - y; dy *= -1; }
+                else if (y > H - B_RAD && dy > 0) { y = 2 * (H - B_RAD) - y; dy *= -1; }
+            }
+            return y;
+        }
+
+        function clientUpdate() {
+            const move = 1.7 * sensitivity * (ball.speed / START_SPEED), fric = 0.84;
+            if (keys['ArrowUp']   || keys['KeyW']) p2.vy -= move;
+            if (keys['ArrowDown'] || keys['KeyS']) p2.vy += move;
+            p2.vy *= fric; p2.y += p2.vy;
+            if (conn && conn.open) conn.send({ t: 'i', y: p2.y });
+        }
+
+        function maybeSpawnPowerUp() {
+            if (online && !isHost) return;
+            if (!chaosMode || currentPowerUp || !gameActive || paused) return;
+            if (Math.random() < 1 / 240) {   // ~once every 4s of rally
+                currentPowerUp = {
+                    x: 385, y: 100 + Math.random() * 300,
+                    type: Math.random() < 0.5 ? 'EXTEND' : 'SHRINK'
+                };
+            }
+        }
+
+        function updateHUD() {
+            el('p1Score').innerText = p1.score;
+            el('p2Score').innerText = p2.score;
+            const t = Math.max(0, timeLeft);
+            const m = Math.floor(t / 60), s = Math.floor(t % 60);
+            el('timer-display').innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        /* ---------- Networking ----------
+           Host runs the simulation and streams state; the client streams only its
+           paddle position back. Everything is guarded on conn.open. */
+        function sendState(over, win) {
+            if (!online || !conn || !conn.open) return;
+            conn.send({
+                t: 's', bx: ball.x, by: ball.y, bs: ball.speed,
+                p1y: p1.y, p1h: p1.h, p2h: p2.h,
+                s1: p1.score, s2: p2.score, time: timeLeft,
+                gm: gameModeType, chaos: chaosMode, pw: currentPowerUp,
+                over: !!over, win: win
+            });
+        }
+
+        function onData(d) {
+            if (!d || typeof d !== 'object') return;
+            if (isHost) {
+                if (d.t === 'i' && typeof d.y === 'number') p2.y = d.y;
+                return;
+            }
+            if (d.t !== 's') return;
+            ball.x = d.bx; ball.y = d.by; ball.speed = d.bs;
+            p1.y = d.p1y; p1.h = d.p1h; p2.h = d.p2h;
+            p1.score = d.s1; p2.score = d.s2; timeLeft = d.time;
+            if (d.gm !== gameModeType) setGameMode(d.gm);
+            chaosMode = d.chaos; currentPowerUp = d.pw;
+            if (d.over) endMatch(d.win);
+            else if (matchOver) {          // host hit Play Again
+                matchOver = false; gameActive = true;
+                el('winScreen').style.display = 'none';
+            }
+        }
+
+        function netError(msg) {
+            el('statusMsg').innerText = msg;
+            el('hostBtn').disabled = false; el('joinBtn').disabled = false;
+        }
+
+        function friendlyError(type) {
+            switch (type) {
+                case 'peer-unavailable':    return 'No game found with that code. Check it and try again.';
+                case 'network':
+                case 'server-error':        return 'Could not reach the matchmaking server. Check your connection.';
+                case 'browser-incompatible':return 'This browser does not support online play.';
+                case 'ssl-unavailable':     return 'Online play needs a secure (https) connection.';
+                default:                    return 'Connection failed' + (type ? ' (' + type + ')' : '') + '. Try again.';
+            }
+        }
+
+        function bindConn() {
+            conn.on('open', beginNet);
+            conn.on('data', onData);
+            conn.on('close', onDisconnect);
+            conn.on('error', onDisconnect);
+            if (conn.open) beginNet();
+        }
+
+        function beginNet() {
+            if (netStarted) return;
+            netStarted = true;
+            clearTimeout(joinTimer);
+            el('statusMsg').innerText = 'Connected!';
+            init(2, true);
+        }
+
+        function onDisconnect() {
+            if (!netStarted) return;
+            netStarted = false; online = false; gameActive = false; matchOver = true;
+            el('pauseMenu').style.display = 'none';
+            el('winnerText').innerText = 'OPPONENT LEFT';
+            el('againBtn').style.display = 'none';
+            el('winScreen').style.display = 'flex';
+        }
+
+        function teardownNet() {
+            clearTimeout(joinTimer);
+            netStarted = false; online = false; isHost = false; hostRetries = 0;
+            if (conn) { try { conn.close(); } catch (e) {} conn = null; }
+            if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+            el('hostBtn').disabled = false; el('joinBtn').disabled = false;
+        }
+
+        function startMultiplayer(host) {
+            if (typeof Peer === 'undefined') {
+                netError('Multiplayer library did not load. Check your connection and refresh.');
+                return;
+            }
+            const code = el('joinId').value.trim();
+            if (!host && !/^\d{4}$/.test(code)) {
+                netError('Enter the 4-digit code from the host.');
+                return;
+            }
+
+            teardownNet();
+            isHost = host;
+            el('statusMsg').innerText = 'Connecting...';
+            el('hostBtn').disabled = true; el('joinBtn').disabled = true;
+
+            // A bare 4-digit id collides with every other app on the public PeerJS
+            // broker, which is why joining used to fail at random. Namespace it.
+            const myId = host ? PEER_PREFIX + Math.floor(1000 + Math.random() * 9000) : undefined;
+            peer = new Peer(myId);
+
+            peer.on('open', id => {
+                if (host) {
+                    el('statusMsg').innerHTML =
+                        `CODE: <b class="code">${id.replace(PEER_PREFIX, '')}</b><br>` +
+                        `<span class="hint">Give this to Player 2</span>`;
+                } else {
+                    conn = peer.connect(PEER_PREFIX + code);
+                    bindConn();
+                    joinTimer = setTimeout(() => {
+                        if (!netStarted) { teardownNet(); netError('No answer. Check the code and that the host is still waiting.'); }
+                    }, 15000);
+                }
+            });
+
+            peer.on('connection', c => {
+                if (conn && conn.open) { try { c.close(); } catch (e) {} return; }  // one opponent only
+                conn = c;
+                bindConn();
+            });
+
+            peer.on('error', err => {
+                const type = err && err.type;
+                if (host && type === 'unavailable-id' && hostRetries < 5) {
+                    hostRetries++; startMultiplayer(true); return;   // code taken, roll another
+                }
+                if (type === 'peer-unavailable' || !netStarted) {
+                    teardownNet();
+                    netError(friendlyError(type));
+                }
+            });
+
+            peer.on('disconnected', () => { if (!netStarted) netError('Lost the matchmaking server. Try again.'); });
+        }
+
+        /* ---------- Admin ---------- */
+        function openAdmin() { paused = true; el('pauseMenu').style.display = 'none'; el('secretWindow').style.display = 'flex'; }
+        function closeAdmin() { el('secretWindow').style.display = 'none'; paused = false; }
+        function checkAdmin() { if (el('adminPass').value === "dieh0neydie") el('cheats').style.display = 'block'; }
+        function applyCheats() {
+            const num = (v, fallback) => { const x = parseInt(v, 10); return Number.isFinite(x) ? x : fallback; };
+            p1.score = Math.max(0, num(el('chP1').value, p1.score));
+            p2.score = Math.max(0, num(el('chP2').value, p2.score));
+            timeLeft = Math.max(0, num(el('chTime').value, timeLeft));
+            updateHUD();
+            closeAdmin();
+        }
+
+        /* ---------- Render ---------- */
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            ctx.save();
+            ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 2; ctx.setLineDash([10, 15]);
+            ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+            ctx.restore();
+
+            // Show which half drives which paddle when two people share one screen.
+            if (isTouch && isLocal2P() && gameActive) {
+                ctx.save();
+                ctx.fillStyle = "rgba(255,255,255,0.18)";
+                ctx.font = "bold 20px 'Segoe UI', sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("P1 SIDE", W * 0.25, H - 16);
+                ctx.fillText("P2 SIDE", W * 0.75, H - 16);
+                ctx.restore();
+            }
+
+            ball.trail.forEach((t, i) => {
+                ctx.fillStyle = t.c; ctx.globalAlpha = i / 40;
+                ctx.beginPath(); ctx.arc(t.x, t.y, B_RAD * (i / 15), 0, Math.PI * 2); ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            if (currentPowerUp) {
+                ctx.fillStyle = currentPowerUp.type === 'EXTEND' ? '#0f0' : '#f0f';
+                ctx.fillRect(currentPowerUp.x, currentPowerUp.y, 30, 30);
+            }
+
+            [p1, p2].forEach(p => {
+                ctx.fillStyle = p.color;
+                p.trail.forEach((t, i) => { ctx.globalAlpha = i / 20; ctx.fillRect(p.x, t.y, P_WIDTH, t.h); });
+                ctx.globalAlpha = 1;
+                ctx.fillRect(p.x, p.y, P_WIDTH, p.h);
+            });
+
+            ctx.fillStyle = "#fff";
+            ctx.beginPath(); ctx.arc(ball.x, ball.y, B_RAD, 0, Math.PI * 2); ctx.fill();
+        }
+
+        /* ---------- Boot ---------- */
+        let savedSens = null;
+        try { savedSens = localStorage.getItem('pong-sens'); } catch (e) {}
+        setSensitivity(savedSens === null ? 1 : savedSens, false);
+        setDiff(1);
+        setGameMode('classic');
+        updateHUD();
+        document.body.classList.toggle('touch', isTouch);
+        el('controlsHint').innerHTML = isTouch
+            ? 'Drag anywhere on your half of the court to move.<br>Tap <b>||</b> to pause. Long-press the score to open admin.'
+            : 'P1 <b>W</b>/<b>S</b> &nbsp;·&nbsp; P2 <b>&uarr;</b>/<b>&darr;</b> &nbsp;·&nbsp; <b>Esc</b> pause &nbsp;·&nbsp; or drag with the mouse';
+        draw();
     </script>
 </body>
 </html>
