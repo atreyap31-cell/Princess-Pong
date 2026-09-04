@@ -1,4 +1,4 @@
-# Princess-Pong
+# Princess Pong
 
 Pong for a princess and a senior citizen.
 
@@ -33,6 +33,14 @@ drag anywhere on the court.
 | Medium | moderate speed, still only chases the live ball |
 | Hard   | reads the ball's bounce path, occasional mistakes |
 | Insane | fast and accurate — beatable, but not often |
+
+## Live commentary
+
+A commentator calls the match from between the scores - goals, near misses, long
+rallies, edge returns, streaks, comebacks, shutouts, match point, the closing
+seconds, power-ups and the final whistle. 157 written lines across 19 event
+types, picked at random and never repeating back to back. In online games the
+host's commentary is mirrored to the other player so you both read the same call.
 
 ## Secrets
 
