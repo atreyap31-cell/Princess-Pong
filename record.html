@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Princess Pong - Commentary Recorder</title>
+<style>
+  :root { --primary:#00ffcc; --accent:#ffcc00; --secondary:#ff0066; --bg:#0b0b0e; --panel:#131318; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:#fff; font-family:'Segoe UI',system-ui,sans-serif;
+         min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:16px; }
+  h1 { font-size:19px; letter-spacing:3px; margin:4px 0 2px; color:var(--primary); }
+  .sub { color:#777; font-size:12px; margin-bottom:14px; text-align:center; }
+  .wrap { width:min(760px,100%); }
+  .bar { height:8px; background:#222; border-radius:4px; overflow:hidden; margin-bottom:6px; }
+  .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--primary),var(--accent)); width:0; }
+  .counts { display:flex; justify-content:space-between; font-size:12px; color:#888; margin-bottom:14px; }
+  .card { background:var(--panel); border:1px solid #26262e; border-radius:12px; padding:22px; text-align:center; }
+  .hint { color:var(--accent); font-size:12.5px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px; }
+  .line { font-size:clamp(20px,4.2vw,34px); font-weight:800; line-height:1.3; margin:6px 0 4px; }
+  .meta { font-size:11px; color:#666; margin-bottom:16px; }
+  .status { min-height:24px; font-size:13px; margin:10px 0; }
+  .rec { color:var(--secondary); font-weight:700; }
+  .ok { color:var(--primary); font-weight:700; }
+  .level { height:6px; background:#222; border-radius:3px; overflow:hidden; margin:12px auto; width:70%; }
+  .level i { display:block; height:100%; width:0; background:var(--primary); transition:width .05s; }
+  .row { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
+  button { min-height:46px; padding:10px 18px; font-size:13px; font-weight:700; text-transform:uppercase;
+           background:transparent; color:#fff; border:2px solid #fff; border-radius:8px; cursor:pointer; }
+  button:hover:not(:disabled) { background:#fff; color:#000; }
+  button:disabled { opacity:.35; cursor:default; }
+  button.p { border-color:var(--primary); color:var(--primary); }
+  button.a { border-color:var(--accent); color:var(--accent); }
+  button.d { border-color:#444; color:#999; }
+  .keys { margin-top:16px; font-size:11.5px; color:#666; line-height:1.9; text-align:center; }
+  kbd { background:#22222a; border:1px solid #35353f; border-radius:4px; padding:1px 6px; font-size:11px; }
+  .done { color:var(--primary); }
+  .todo { color:#555; }
+  .grid { display:flex; flex-wrap:wrap; gap:3px; margin-top:16px; justify-content:center; }
+  .dot { width:9px; height:9px; border-radius:2px; background:#2a2a33; cursor:pointer; }
+  .dot.has { background:var(--primary); }
+  .dot.cur { outline:2px solid #fff; outline-offset:1px; }
+  .panel { background:var(--panel); border:1px solid #26262e; border-radius:12px; padding:16px; margin-top:16px; font-size:13px; color:#aaa; line-height:1.6; }
+  a { color:var(--primary); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>COMMENTARY RECORDER</h1>
+  <div class="sub">Read each line the way a commentator would. One file to send back at the end - nothing gets installed.</div>
+
+  <div class="bar"><i id="prog"></i></div>
+  <div class="counts"><span id="count">0 / 0 recorded</span><span id="tier"></span></div>
+
+  <div class="card">
+    <div class="hint" id="hint">-</div>
+    <div class="line" id="line">-</div>
+    <div class="meta" id="meta"></div>
+    <div class="level"><i id="lvl"></i></div>
+    <div class="status" id="status">Click <b>Enable microphone</b> to begin.</div>
+    <div class="row">
+      <button id="micBtn" class="a">Enable microphone</button>
+      <button id="recBtn" class="p" disabled>Record</button>
+      <button id="playBtn" disabled>Play</button>
+      <button id="nextBtn" disabled>Next</button>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="prevBtn" class="d" disabled>&larr; Prev</button>
+      <button id="skipBtn" class="d" disabled>Skip</button>
+      <button id="delBtn" class="d" disabled>Delete take</button>
+    </div>
+    <div class="keys">
+      <kbd>Space</kbd> start / stop recording &nbsp;&middot;&nbsp; <kbd>Enter</kbd> next &nbsp;&middot;&nbsp;
+      <kbd>P</kbd> play back &nbsp;&middot;&nbsp; <kbd>R</kbd> redo &nbsp;&middot;&nbsp; <kbd>&larr;</kbd> <kbd>&rarr;</kbd> move
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="panel">
+    <b style="color:#fff;">When you are done (or part-done)</b><br>
+    Press <b>Export</b> for a single <code>.zip</code> - that is the only download. Lines you skip simply
+    stay as on-screen text in the game, so there is no need to finish in one sitting.
+    Your takes are saved in this browser as you go, so you can close the tab and come back.
+    <div class="row" style="margin-top:12px;">
+      <button id="expBtn" class="p">Export one .zip</button>
+      <button id="wipeBtn" class="d">Erase all takes</button>
+    </div>
+    <div id="expMsg" style="margin-top:10px; font-size:12px;"></div>
+  </div>
+</div>
+
+<script>
+const LINES = [{"id":"comeback_00","ev":"comeback","text":"WHAT A TURNAROUND! I do not believe it!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_01","ev":"comeback","text":"ALL SQUARE! From NOWHERE!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_02","ev":"comeback","text":"THEY ARE BACK! We have a MATCH!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_03","ev":"comeback","text":"The deficit is GONE! Absolutely gone!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_04","ev":"comeback","text":"NEVER write anyone off! NEVER!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_05","ev":"comeback","text":"That is a PROPER comeback! Take a bow!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_06","ev":"comeback","text":"LEVEL PEGGING! Are you watching this?!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_07","ev":"comeback","text":"The gap has CLOSED! Extraordinary!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_08","ev":"comeback","text":"FROM THE BRINK! What a fightback!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"comeback_09","ev":"comeback","text":"STUNNING recovery! The gallery is ROARING!","hint":"SHOUT THIS - biggest energy of the lot","tier":1},{"id":"edge_00","ev":"edge","text":"OFF THE VERY TIP!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_01","ev":"edge","text":"EDGE WORK! Filthy, filthy angle!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_02","ev":"edge","text":"That is the corner of the CORNER!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_03","ev":"edge","text":"SHARP! Where on earth did that go?!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_04","ev":"edge","text":"Angled off the edge - OUTRAGEOUS!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_05","ev":"edge","text":"Tip of the paddle and AWAY!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_06","ev":"edge","text":"WICKED deflection!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_07","ev":"edge","text":"Cut it fine and got away with it - cheeky!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_08","ev":"edge","text":"Edge return! PURE NERVE!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"edge_09","ev":"edge","text":"Barely touched it and made it COUNT!","hint":"Amazed - off the very tip of the paddle","tier":1},{"id":"goal_00","ev":"goal","text":"GOAL! The gallery is UP!","hint":"Excited - a point just went in","tier":1},{"id":"goal_01","ev":"goal","text":"IT IS IN! Reset and go again!","hint":"Excited - a point just went in","tier":1},{"id":"goal_02","ev":"goal","text":"FINALLY! Somebody had to break it!","hint":"Excited - a point just went in","tier":1},{"id":"goal_03","ev":"goal","text":"THAT WILL DO IT!","hint":"Excited - a point just went in","tier":1},{"id":"goal_04","ev":"goal","text":"Right down the middle of NOWHERE!","hint":"Excited - a point just went in","tier":1},{"id":"goal_05","ev":"goal","text":"The wall was NOT consulted!","hint":"Excited - a point just went in","tier":1},{"id":"goal_06","ev":"goal","text":"Point awarded - play on, play on!","hint":"Excited - a point just went in","tier":1},{"id":"goal_07","ev":"goal","text":"One more on the board - what a match!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_00","ev":"goalP1","text":"P1 BURIES IT!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_01","ev":"goalP1","text":"P1 finds the gap - OH, that is lovely!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_02","ev":"goalP1","text":"GET IN! P1 on the board!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_03","ev":"goalP1","text":"Clean as you like from P1!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_04","ev":"goalP1","text":"P1 says thank you VERY much!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_05","ev":"goalP1","text":"Straight past P2 - P1 SCORES!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_06","ev":"goalP1","text":"OH! P1 takes it!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_07","ev":"goalP1","text":"Point P1 - and no arguments!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_08","ev":"goalP1","text":"P1 with the finish! Superb!","hint":"Excited - a point just went in","tier":1},{"id":"goalP1_09","ev":"goalP1","text":"TEXTBOOK from P1!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_00","ev":"goalP2","text":"P2 STRIKES!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_01","ev":"goalP2","text":"P2 slips it through - brilliant!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_02","ev":"goalP2","text":"POINT P2! What a response!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_03","ev":"goalP2","text":"P2 will take that ALL DAY!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_04","ev":"goalP2","text":"The door was open and P2 KICKED IT DOWN!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_05","ev":"goalP2","text":"P2 ANSWERS BACK!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_06","ev":"goalP2","text":"OH YES! P2 on the scoreboard!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_07","ev":"goalP2","text":"Ice cold from P2!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_08","ev":"goalP2","text":"P2 makes it COUNT!","hint":"Excited - a point just went in","tier":1},{"id":"goalP2_09","ev":"goalP2","text":"Beautifully struck, P2!","hint":"Excited - a point just went in","tier":1},{"id":"matchPoint_00","ev":"matchPoint","text":"MATCH POINT!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"matchPoint_01","ev":"matchPoint","text":"ONE point from the title!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"matchPoint_02","ev":"matchPoint","text":"THIS COULD BE IT!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"matchPoint_03","ev":"matchPoint","text":"Serving for the MATCH!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"matchPoint_04","ev":"matchPoint","text":"The finish line is RIGHT THERE!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"matchPoint_05","ev":"matchPoint","text":"Nerves of steel required - this is THE moment!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"matchPoint_06","ev":"matchPoint","text":"One more and it is ALL OVER!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"matchPoint_07","ev":"matchPoint","text":"CHAMPIONSHIP POINT! Do not look away!","hint":"Tense, then loud - one point from winning","tier":1},{"id":"nearMiss_00","ev":"nearMiss","text":"OHHH! Fingertips away!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_01","ev":"nearMiss","text":"By a WHISKER! Unbelievable!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_02","ev":"nearMiss","text":"NO! So close - agony!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_03","ev":"nearMiss","text":"A paddle width from glory! CRUEL!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_04","ev":"nearMiss","text":"NEARLY! The whole gallery gasped!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_05","ev":"nearMiss","text":"MILLIMETRES! I cannot believe it!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_06","ev":"nearMiss","text":"Just past the edge - oh, that HURTS!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_07","ev":"nearMiss","text":"That deserved to be saved! ROBBERY!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_08","ev":"nearMiss","text":"ALMOST! Hands on heads!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"nearMiss_09","ev":"nearMiss","text":"Heartbreak by a HAIR!","hint":"Agonised - they ALMOST saved it","tier":1},{"id":"rally_00","ev":"rally","text":"This rally will NOT die!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_01","ev":"rally","text":"Back and forth, back and forth - I am dizzy!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_02","ev":"rally","text":"Neither one will BLINK!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_03","ev":"rally","text":"Somebody call an intermission!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_04","ev":"rally","text":"This is a SIEGE now!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_05","ev":"rally","text":"STILL GOING! Remarkable scenes!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_06","ev":"rally","text":"That poor ball!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_07","ev":"rally","text":"A proper old-fashioned DUEL!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_08","ev":"rally","text":"Nobody wants to lose this one!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_09","ev":"rally","text":"Rally of the match, SURELY!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_10","ev":"rally","text":"Look at the stamina on display!","hint":"Building tension - this rally won't end","tier":1},{"id":"rally_11","ev":"rally","text":"Whoever wins this deserves TWO points!","hint":"Building tension - this rally won't end","tier":1},{"id":"win_00","ev":"win","text":"THAT IS THE MATCH!","hint":"Triumphant - the match is over","tier":1},{"id":"win_01","ev":"win","text":"IT IS ALL OVER! What a finish!","hint":"Triumphant - the match is over","tier":1},{"id":"win_02","ev":"win","text":"CROWN THEM! It is done!","hint":"Triumphant - the match is over","tier":1},{"id":"win_03","ev":"win","text":"GAME, SET, AND PONG!","hint":"Triumphant - the match is over","tier":1},{"id":"win_04","ev":"win","text":"The victor takes the court!","hint":"Triumphant - the match is over","tier":1},{"id":"win_05","ev":"win","text":"FINAL WHISTLE! Splendid stuff!","hint":"Triumphant - the match is over","tier":1},{"id":"win_06","ev":"win","text":"AND THAT IS THAT!","hint":"Triumphant - the match is over","tier":1},{"id":"win_07","ev":"win","text":"A worthy winner - take a BOW!","hint":"Triumphant - the match is over","tier":1},{"id":"win_08","ev":"win","text":"THE GALLERY RISES!","hint":"Triumphant - the match is over","tier":1},{"id":"win_09","ev":"win","text":"Match complete! Somebody get me a rematch!","hint":"Triumphant - the match is over","tier":1},{"id":"clutch_00","ev":"clutch","text":"TEN SECONDS LEFT!","hint":"Urgent countdown - seconds left","tier":2},{"id":"clutch_01","ev":"clutch","text":"The clock is nearly OUT!","hint":"Urgent countdown - seconds left","tier":2},{"id":"clutch_02","ev":"clutch","text":"FINAL MOMENTS!","hint":"Urgent countdown - seconds left","tier":2},{"id":"clutch_03","ev":"clutch","text":"Time is almost GONE!","hint":"Urgent countdown - seconds left","tier":2},{"id":"clutch_04","ev":"clutch","text":"Whatever happens, happens NOW!","hint":"Urgent countdown - seconds left","tier":2},{"id":"clutch_05","ev":"clutch","text":"The clock is the real opponent now!","hint":"Urgent countdown - seconds left","tier":2},{"id":"clutch_06","ev":"clutch","text":"SECONDS REMAINING - GO, GO, GO!","hint":"Urgent countdown - seconds left","tier":2},{"id":"shutout_00","ev":"shutout","text":"STILL nothing on the other side!","hint":"Teasing - one player has scored nothing","tier":2},{"id":"shutout_01","ev":"shutout","text":"That blank scoreboard is getting HEAVY!","hint":"Teasing - one player has scored nothing","tier":2},{"id":"shutout_02","ev":"shutout","text":"One player yet to trouble the scorer!","hint":"Teasing - one player has scored nothing","tier":2},{"id":"shutout_03","ev":"shutout","text":"This is getting ONE-SIDED!","hint":"Teasing - one player has scored nothing","tier":2},{"id":"shutout_04","ev":"shutout","text":"SOMEBODY get on the board!","hint":"Teasing - one player has scored nothing","tier":2},{"id":"shutout_05","ev":"shutout","text":"A shutout is BREWING here!","hint":"Teasing - one player has scored nothing","tier":2},{"id":"shutout_06","ev":"shutout","text":"No mercy on the menu today!","hint":"Teasing - one player has scored nothing","tier":2},{"id":"speed_00","ev":"speed","text":"The pace is CLIMBING!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_01","ev":"speed","text":"That ball is picking up SPEED!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_02","ev":"speed","text":"Quick now - HOLD ON!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_03","ev":"speed","text":"Blink and it is PAST you!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_04","ev":"speed","text":"Another GEAR! Where did that come from?!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_05","ev":"speed","text":"SERIOUS velocity on that one!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_06","ev":"speed","text":"IT IS FLYING NOW!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_07","ev":"speed","text":"Reactions only from here - good luck!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_08","ev":"speed","text":"That is GENUINELY fast!","hint":"Urgent - the ball is getting fast","tier":2},{"id":"speed_09","ev":"speed","text":"SLOW DOWN! ...it will not.","hint":"Urgent - the ball is getting fast","tier":2},{"id":"start_00","ev":"start","text":"HERE WE GO! Places, everyone!","hint":"Upbeat, welcoming - match is starting","tier":2},{"id":"start_01","ev":"start","text":"The court is set - and I can barely sit still!","hint":"Upbeat, welcoming - match is starting","tier":2},{"id":"start_02","ev":"start","text":"New match, clean slate, EVERYTHING to play for!","hint":"Upbeat, welcoming - match is starting","tier":2},{"id":"start_03","ev":"start","text":"Serve is AWAY! We are underway!","hint":"Upbeat, welcoming - match is starting","tier":2},{"id":"start_04","ev":"start","text":"Oh, I have been waiting for this one!","hint":"Upbeat, welcoming - match is starting","tier":2},{"id":"start_05","ev":"start","text":"Here we go again - and I want FIREWORKS!","hint":"Upbeat, welcoming - match is starting","tier":2},{"id":"streak_00","ev":"streak","text":"THREE ON THE BOUNCE!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"streak_01","ev":"streak","text":"That is a RUN! Momentum has picked a side!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"streak_02","ev":"streak","text":"Unanswered points PILING UP!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"streak_03","ev":"streak","text":"Somebody find an answer - QUICKLY!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"streak_04","ev":"streak","text":"A streak is forming - and it is ruthless!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"streak_05","ev":"streak","text":"This is a PROCESSION now!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"streak_06","ev":"streak","text":"BACK TO BACK TO BACK!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"streak_07","ev":"streak","text":"The tide has WELL and truly turned!","hint":"Impressed - points piling up one-sided","tier":2},{"id":"chaos_00","ev":"chaos","text":"CHAOS MODE! Anything goes now!","hint":"Gleeful - the rules just went out","tier":3},{"id":"chaos_01","ev":"chaos","text":"The rulebook has been THROWN OUT!","hint":"Gleeful - the rules just went out","tier":3},{"id":"chaos_02","ev":"chaos","text":"BUCKLE UP - it is chaos!","hint":"Gleeful - the rules just went out","tier":3},{"id":"chaos_03","ev":"chaos","text":"Order has LEFT THE BUILDING!","hint":"Gleeful - the rules just went out","tier":3},{"id":"chaos_04","ev":"chaos","text":"Expect the UNEXPECTED!","hint":"Gleeful - the rules just went out","tier":3},{"id":"chaos_05","ev":"chaos","text":"Oh, this is going to be FUN!","hint":"Gleeful - the rules just went out","tier":3},{"id":"god_00","ev":"god","text":"That is... a VERY large paddle!","hint":"Amused disbelief - someone is cheating","tier":3},{"id":"god_01","ev":"god","text":"Someone has BENT THE RULES!","hint":"Amused disbelief - someone is cheating","tier":3},{"id":"god_02","ev":"god","text":"DIVINE INTERVENTION on court!","hint":"Amused disbelief - someone is cheating","tier":3},{"id":"god_03","ev":"god","text":"That hardly seems SPORTING!","hint":"Amused disbelief - someone is cheating","tier":3},{"id":"god_04","ev":"god","text":"The wall has entered the game!","hint":"Amused disbelief - someone is cheating","tier":3},{"id":"god_05","ev":"god","text":"I will allow it. Reluctantly!","hint":"Amused disbelief - someone is cheating","tier":3},{"id":"powerGrab_00","ev":"powerGrab","text":"GRABBED IT!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerGrab_01","ev":"powerGrab","text":"POWER-UP CLAIMED!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerGrab_02","ev":"powerGrab","text":"That is an advantage TAKEN!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerGrab_03","ev":"powerGrab","text":"Snapped up MID-FLIGHT!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerGrab_04","ev":"powerGrab","text":"The paddle situation just CHANGED!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerGrab_05","ev":"powerGrab","text":"Oh, that is just UNFAIR!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerGrab_06","ev":"powerGrab","text":"COLLECTED - and it counts!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerGrab_07","ev":"powerGrab","text":"Advantage: whoever just did THAT!","hint":"Delighted - somebody grabbed it","tier":3},{"id":"powerSpawn_00","ev":"powerSpawn","text":"OH! Something has appeared mid-court!","hint":"Surprised - a power-up appeared","tier":3},{"id":"powerSpawn_01","ev":"powerSpawn","text":"A POWER-UP! Go and get it!","hint":"Surprised - a power-up appeared","tier":3},{"id":"powerSpawn_02","ev":"powerSpawn","text":"Chaos delivers a GIFT!","hint":"Surprised - a power-up appeared","tier":3},{"id":"powerSpawn_03","ev":"powerSpawn","text":"There is a PRIZE in the middle!","hint":"Surprised - a power-up appeared","tier":3},{"id":"powerSpawn_04","ev":"powerSpawn","text":"Free upgrade - FIRST COME FIRST SERVED!","hint":"Surprised - a power-up appeared","tier":3},{"id":"powerSpawn_05","ev":"powerSpawn","text":"Careful! That one is LIVE!","hint":"Surprised - a power-up appeared","tier":3},{"id":"powerSpawn_06","ev":"powerSpawn","text":"The court just CHANGED THE RULES!","hint":"Surprised - a power-up appeared","tier":3},{"id":"stalemate_00","ev":"stalemate","text":"We may be here ALL EVENING!","hint":"Exasperated, played for laughs","tier":3},{"id":"stalemate_01","ev":"stalemate","text":"Is ANYONE going to end this?!","hint":"Exasperated, played for laughs","tier":3},{"id":"stalemate_02","ev":"stalemate","text":"This point has filed for OVERTIME!","hint":"Exasperated, played for laughs","tier":3},{"id":"stalemate_03","ev":"stalemate","text":"This rally has its own POSTCODE!","hint":"Exasperated, played for laughs","tier":3},{"id":"stalemate_04","ev":"stalemate","text":"Somebody miss! PLEASE! Anybody!","hint":"Exasperated, played for laughs","tier":3},{"id":"stalemate_05","ev":"stalemate","text":"I have visibly AGED during this rally!","hint":"Exasperated, played for laughs","tier":3}];
+
+/* ---------- storage ---------- */
+let db;
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open('pong-vo', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('takes');
+    r.onsuccess = () => { db = r.result; res(); };
+    r.onerror = () => rej(r.error);
+  });
+}
+const put = (k,v)=>new Promise(r=>{ const t=db.transaction('takes','readwrite'); t.objectStore('takes').put(v,k); t.oncomplete=r; });
+const get = k=>new Promise(r=>{ const q=db.transaction('takes').objectStore('takes').get(k); q.onsuccess=()=>r(q.result); });
+const del = k=>new Promise(r=>{ const t=db.transaction('takes','readwrite'); t.objectStore('takes').delete(k); t.oncomplete=r; });
+const allKeys = ()=>new Promise(r=>{ const q=db.transaction('takes').objectStore('takes').getAllKeys(); q.onsuccess=()=>r(q.result); });
+const clearAll = ()=>new Promise(r=>{ const t=db.transaction('takes','readwrite'); t.objectStore('takes').clear(); t.oncomplete=r; });
+
+/* ---------- state ---------- */
+let idx = 0, have = new Set(), stream = null, rec = null, chunks = [], recording = false, mime = '';
+const $ = id => document.getElementById(id);
+
+function pickMime(){
+  for (const m of ['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/webm','audio/mp4'])
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  return '';
+}
+
+async function enableMic(){
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio:{
+      echoCancellation:false, noiseSuppression:true, autoGainControl:true } });
+  } catch (e) { $('status').textContent = 'Microphone blocked: ' + e.message; return; }
+  mime = pickMime();
+  meter();
+  $('micBtn').disabled = true; $('micBtn').textContent = 'Microphone on';
+  ['recBtn','playBtn','nextBtn','prevBtn','skipBtn','delBtn'].forEach(b=>$(b).disabled=false);
+  $('status').innerHTML = 'Ready. Press <b>Space</b> to record.';
+  render();
+}
+
+function meter(){
+  const ac = new (window.AudioContext||window.webkitAudioContext)();
+  const an = ac.createAnalyser(); an.fftSize = 512;
+  ac.createMediaStreamSource(stream).connect(an);
+  const buf = new Uint8Array(an.frequencyBinCount);
+  (function tick(){
+    an.getByteTimeDomainData(buf);
+    let peak = 0;
+    for (const v of buf) peak = Math.max(peak, Math.abs(v-128)/128);
+    $('lvl').style.width = Math.min(100, peak*180) + '%';
+    requestAnimationFrame(tick);
+  })();
+}
+
+function startRec(){
+  if (!stream || recording) return;
+  chunks = [];
+  rec = new MediaRecorder(stream, mime ? {mimeType:mime} : undefined);
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = async () => {
+    const blob = new Blob(chunks, {type: mime || 'audio/webm'});
+    if (blob.size > 800) { await put(LINES[idx].id, blob); have.add(LINES[idx].id); }
+    recording = false;
+    $('recBtn').textContent = 'Record';
+    $('status').innerHTML = '<span class="ok">Take saved.</span> <b>Enter</b> for next, <b>P</b> to hear it, <b>R</b> to redo.';
+    render();
+  };
+  rec.start();
+  recording = true;
+  $('recBtn').textContent = 'Stop';
+  $('status').innerHTML = '<span class="rec">● Recording…</span> press Space to stop';
+}
+function stopRec(){ if (recording && rec) rec.stop(); }
+function toggleRec(){ recording ? stopRec() : startRec(); }
+
+async function playTake(){
+  const b = await get(LINES[idx].id);
+  if (!b) { $('status').textContent = 'Nothing recorded for this line yet.'; return; }
+  new Audio(URL.createObjectURL(b)).play();
+}
+
+function move(d){ stopRec(); idx = Math.max(0, Math.min(LINES.length-1, idx+d)); render(); }
+
+function render(){
+  const L = LINES[idx];
+  $('hint').textContent = L.hint;
+  $('line').textContent = L.text;
+  $('meta').textContent = `${idx+1} of ${LINES.length}  ·  ${L.ev}  ·  ${have.has(L.id)?'recorded':'not recorded'}`;
+  $('count').textContent = `${have.size} / ${LINES.length} recorded`;
+  $('tier').textContent = L.tier===1 ? 'core line - heard often'
+                        : L.tier===2 ? 'common line' : 'rare line';
+  $('prog').style.width = (have.size/LINES.length*100) + '%';
+  $('delBtn').disabled = !have.has(L.id);
+  const g = $('grid');
+  if (g.children.length !== LINES.length) {
+    g.innerHTML = '';
+    LINES.forEach((l,i)=>{ const d=document.createElement('div'); d.className='dot';
+      d.title = l.text; d.onclick = ()=>{ idx=i; render(); }; g.appendChild(d); });
+  }
+  [...g.children].forEach((d,i)=>{
+    d.className = 'dot' + (have.has(LINES[i].id)?' has':'') + (i===idx?' cur':'');
+  });
+}
+
+/* ---------- one-file export: a ZIP built in the browser ---------- */
+const CRC = (()=>{ const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; }
+  return t; })();
+function crc32(u8){ let c=0xFFFFFFFF; for(let i=0;i<u8.length;i++) c = CRC[(c^u8[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+
+function makeZip(files){
+  const parts=[], central=[]; let off=0;
+  const enc = new TextEncoder();
+  for (const f of files){
+    const nb = enc.encode(f.name), crc = crc32(f.data);
+    const h = new Uint8Array(30+nb.length), dv = new DataView(h.buffer);
+    dv.setUint32(0,0x04034b50,true); dv.setUint16(4,20,true);
+    dv.setUint32(14,crc,true); dv.setUint32(18,f.data.length,true); dv.setUint32(22,f.data.length,true);
+    dv.setUint16(26,nb.length,true);
+    h.set(nb,30);
+    parts.push(h, f.data);
+    central.push({nb,crc,size:f.data.length,off});
+    off += h.length + f.data.length;
+  }
+  const cdStart = off;
+  for (const c of central){
+    const h = new Uint8Array(46+c.nb.length), dv = new DataView(h.buffer);
+    dv.setUint32(0,0x02014b50,true); dv.setUint16(4,20,true); dv.setUint16(6,20,true);
+    dv.setUint32(16,c.crc,true); dv.setUint32(20,c.size,true); dv.setUint32(24,c.size,true);
+    dv.setUint16(28,c.nb.length,true); dv.setUint32(42,c.off,true);
+    h.set(c.nb,46);
+    parts.push(h); off += h.length;
+  }
+  const e = new Uint8Array(22), dv = new DataView(e.buffer);
+  dv.setUint32(0,0x06054b50,true);
+  dv.setUint16(8,central.length,true); dv.setUint16(10,central.length,true);
+  dv.setUint32(12,off-cdStart,true); dv.setUint32(16,cdStart,true);
+  parts.push(e);
+  return new Blob(parts,{type:'application/zip'});
+}
+
+async function exportZip(){
+  const keys = await allKeys();
+  if (!keys.length) { $('expMsg').textContent = 'Nothing recorded yet.'; return; }
+  $('expMsg').textContent = 'Packing ' + keys.length + ' takes…';
+  const ext = (mime.includes('ogg')?'ogg':mime.includes('mp4')?'m4a':'webm');
+  const files = [];
+  for (const k of keys){
+    const b = await get(k);
+    files.push({ name: k + '.' + ext, data: new Uint8Array(await b.arrayBuffer()) });
+  }
+  files.push({ name:'index.json',
+    data: new TextEncoder().encode(JSON.stringify(
+      { count: keys.length, ext, mime, lines: LINES.filter(l=>keys.includes(l.id)) }, null, 1)) });
+  const zip = makeZip(files);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zip);
+  a.download = 'princess-pong-voice.zip';
+  a.click();
+  $('expMsg').innerHTML = '<span class="ok">Saved princess-pong-voice.zip (' +
+      (zip.size/1e6).toFixed(1) + ' MB)</span> - that is the only file you need to send back.';
+}
+
+/* ---------- wiring ---------- */
+$('micBtn').onclick = enableMic;
+$('recBtn').onclick = toggleRec;
+$('playBtn').onclick = playTake;
+$('nextBtn').onclick = ()=>move(1);
+$('prevBtn').onclick = ()=>move(-1);
+$('skipBtn').onclick = ()=>move(1);
+$('delBtn').onclick = async ()=>{ await del(LINES[idx].id); have.delete(LINES[idx].id); render(); };
+$('expBtn').onclick = exportZip;
+$('wipeBtn').onclick = async ()=>{
+  if (!confirm('Erase every take you have recorded?')) return;
+  await clearAll(); have.clear(); render(); $('expMsg').textContent='All takes erased.';
+};
+
+addEventListener('keydown', e=>{
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code==='Space'){ e.preventDefault(); toggleRec(); }
+  else if (e.code==='Enter'){ e.preventDefault(); move(1); }
+  else if (e.code==='KeyP'){ playTake(); }
+  else if (e.code==='KeyR'){ startRec(); }
+  else if (e.code==='ArrowRight'){ move(1); }
+  else if (e.code==='ArrowLeft'){ move(-1); }
+});
+
+(async ()=>{ await openDB(); have = new Set(await allKeys()); render(); })();
+</script>
+</body>
+</html>

@@ -82,6 +82,18 @@ you can install it to a home screen and launch it like an app.
 Online multiplayer is the one exception: it needs a connection for signalling.
 The Online menu says so and disables itself when you are offline.
 
+## Recording your own commentator
+
+Open **[record.html](https://atreyap31-cell.github.io/Princess-Pong/record.html)** and read the lines
+out. Nothing is installed and nothing is uploaded - it records in the browser and
+keeps your takes in local storage, so you can stop and come back.
+
+- `Space` records and stops, `Enter` moves on, `P` plays back, `R` redoes a take.
+- Lines are ordered with the ones you hear most first, and each shows a direction
+  (SHOUT THIS, agonised, urgent) so the delivery fits the moment.
+- **Export** produces a single `.zip` - the only file you ever download.
+- Partial sets are fine. Lines you skip just stay as on-screen text in the game.
+
 ## Secrets
 
 - **God modes** (pause menu): *Owen* and *Michael* turn a paddle into a full wall.
