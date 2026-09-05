@@ -17,23 +17,35 @@
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
 
-        #game-wrapper { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        #game-wrapper {
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            position: relative;
+            --court-w: min(96vw, 900px, calc((100svh - 150px) * 1.6));
+        }
+        /* Calibration frame: shown while the screen-size slider is moving so you
+           can drag until the edges line up with your display. */
+        #game-wrapper::after {
+            content: ''; position: absolute; inset: -8px; pointer-events: none;
+            border: 2px dashed var(--accent); border-radius: 12px;
+            opacity: 0; transition: opacity 0.2s ease;
+        }
+        #game-wrapper.calibrating::after { opacity: 1; }
 
         /* Width is capped by the available HEIGHT too, so the court never overflows
            a short/landscape phone screen. 1.6 = the 800x500 aspect ratio. */
         #stage {
             position: relative;
             width: min(96vw, 900px, calc((100vh - 150px) * 1.6));
-            width: min(96vw, 900px, calc((100svh - 150px) * 1.6));
+            width: calc(var(--court-w) * var(--ui-scale, 1));
             aspect-ratio: 8 / 5;
         }
 
         #ui-header {
             visibility: hidden;
             width: min(96vw, 900px, calc((100vh - 150px) * 1.6));
-            width: min(96vw, 900px, calc((100svh - 150px) * 1.6));
+            width: calc(var(--court-w) * var(--ui-scale, 1));
             display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
-            font-size: clamp(22px, 5vw, 46px); font-weight: 800;
+            font-size: calc(clamp(22px, 5vw, 46px) * var(--ui-scale, 1)); font-weight: 800;
         }
         #p1Score, #p2Score { flex: 0 0 auto; min-width: 1.5em; text-align: center; }
         #centre-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -41,7 +53,7 @@
         /* Live commentary sits between the scores. Fixed min-height so the
            court below never shifts when a line appears or clears. */
         #commentary {
-            font-size: clamp(11px, 2.3vw, 17px); font-weight: 600; line-height: 1.25;
+            font-size: calc(clamp(11px, 2.3vw, 17px) * var(--ui-scale, 1)); font-weight: 600; line-height: 1.25;
             color: var(--accent); text-align: center; text-wrap: balance;
             min-height: 2.5em; display: flex; align-items: center; justify-content: center;
             padding: 0 4px; text-shadow: 0 0 14px rgba(255, 204, 0, 0.35);
@@ -142,6 +154,17 @@
         .stat-row:last-child { border-bottom: none; }
         .stat-row b { color: var(--primary); font-weight: 700; }
 
+        .crowd { margin-top: 12px; padding: 2px 10px; }
+        .crowd-top { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; color: #9a9aa4; }
+        .crowd-top b { color: var(--accent); font-weight: 700; }
+        .crowd-bar { margin-top: 7px; height: 9px; border-radius: 5px; background: #232329; overflow: hidden; }
+        .crowd-bar i {
+            display: block; height: 100%; border-radius: 5px;
+            background: linear-gradient(90deg, var(--michael), var(--primary), var(--accent), var(--secondary));
+            background-size: 260px 100%;
+        }
+        .crowd-line { margin-top: 8px; font-size: 12.5px; color: var(--primary); font-style: italic; }
+
         #rotate-hint { display: none; font-size: 11px; color: var(--accent); margin-top: 10px; }
 
         /* On a portrait phone the court is short, so a menu confined to it would
@@ -187,6 +210,13 @@
                                aria-label="Control sensitivity">
                         <span class="sens-val">1.0x</span>
                     </div>
+                    <h3>Screen Size</h3>
+                    <div class="row sens-row">
+                        <input type="range" class="scale-slider" min="0.5" max="1.25" step="0.01" value="1"
+                               aria-label="Screen size">
+                        <span class="scale-val">100%</span>
+                    </div>
+                    <div class="hint" style="margin-top: 2px;">Drag until the dashed frame meets your screen edges.</div>
                     <div class="row" style="margin-top: 10px;">
                         <button type="button" class="sound-btn toggle" onclick="toggleSound()">Sound: ON</button>
                     </div>
@@ -248,6 +278,13 @@
                                aria-label="Control sensitivity">
                         <span class="sens-val">1.0x</span>
                     </div>
+                    <h3>Screen Size</h3>
+                    <div class="row sens-row">
+                        <input type="range" class="scale-slider" min="0.5" max="1.25" step="0.01" value="1"
+                               aria-label="Screen size">
+                        <span class="scale-val">100%</span>
+                    </div>
+                    <div class="hint" style="margin-top: 2px;">Drag until the dashed frame meets your screen edges.</div>
                     <h3>Extra</h3>
                     <div class="row">
                         <button type="button" id="chaosBtn" class="toggle" onclick="toggleChaos()">Chaos Mode: OFF</button>
@@ -301,6 +338,10 @@
         const START_SPEED = 6.5, MAX_SPEED = 35, SPEED_MULT = 1.04;
         const STEP_MS = 1000 / 60;
         const PEER_PREFIX = "princesspong-";
+        /* Calibrated so a serve reads about 21 mph and a maxed-out smash about
+           112 mph - roughly the range of real table tennis. */
+        const MPH_PER_UNIT = 3.2;
+        const mph = v => Math.round(v * MPH_PER_UNIT);
 
         // cap     = top paddle speed, so a weak bot physically cannot keep up
         // accel   = how quickly it reaches that speed
@@ -378,199 +419,201 @@
            Each entry is grouped by the event that triggers it. */
         const COMMENTARY = {
             start: [
-                "Places, everyone. Here we go.",
-                "The court is set. Best of luck to both.",
-                "New match, clean slate.",
-                "Serve is away - we are underway.",
-                "Silence in the gallery. Play ball.",
-                "Here we go again. Try to make it interesting."
+                "HERE WE GO! Places, everyone!",
+                "The court is set - and I can barely sit still!",
+                "New match, clean slate, EVERYTHING to play for!",
+                "Serve is AWAY! We are underway!",
+                "Oh, I have been waiting for this one!",
+                "Here we go again - and I want FIREWORKS!"
             ],
             goalP1: [
-                "P1 puts it away!",
-                "P1 finds the gap!",
-                "That is P1 on the board!",
-                "Clean finish from P1.",
-                "P1 says thank you very much.",
-                "Straight past P2 - P1 scores!",
-                "P1 takes that one.",
-                "Point, P1. No argument.",
-                "P1 with the finish!",
-                "Textbook from P1."
+                "P1 BURIES IT!",
+                "P1 finds the gap - OH, that is lovely!",
+                "GET IN! P1 on the board!",
+                "Clean as you like from P1!",
+                "P1 says thank you VERY much!",
+                "Straight past P2 - P1 SCORES!",
+                "OH! P1 takes it!",
+                "Point P1 - and no arguments!",
+                "P1 with the finish! Superb!",
+                "TEXTBOOK from P1!"
             ],
             goalP2: [
-                "P2 strikes!",
-                "P2 slips it through!",
-                "Point to P2.",
-                "P2 will take that all day.",
-                "P1 left the door open - P2 walked in.",
-                "P2 answers back!",
-                "That is P2 on the scoreboard.",
-                "Cool finish from P2.",
-                "P2 makes it count.",
-                "Well struck, P2."
+                "P2 STRIKES!",
+                "P2 slips it through - brilliant!",
+                "POINT P2! What a response!",
+                "P2 will take that ALL DAY!",
+                "The door was open and P2 KICKED IT DOWN!",
+                "P2 ANSWERS BACK!",
+                "OH YES! P2 on the scoreboard!",
+                "Ice cold from P2!",
+                "P2 makes it COUNT!",
+                "Beautifully struck, P2!"
             ],
             goal: [
-                "Goal! The gallery approves.",
-                "It is in! Reset and go again.",
-                "Somebody had to score eventually.",
-                "That will do it.",
-                "Right down the middle of nowhere.",
-                "The wall was not consulted.",
-                "Point awarded. Play on.",
-                "One more on the board."
+                "GOAL! The gallery is UP!",
+                "IT IS IN! Reset and go again!",
+                "FINALLY! Somebody had to break it!",
+                "THAT WILL DO IT!",
+                "Right down the middle of NOWHERE!",
+                "The wall was NOT consulted!",
+                "Point awarded - play on, play on!",
+                "One more on the board - what a match!"
             ],
             nearMiss: [
-                "Ohh - fingertips away!",
-                "That missed by a whisker.",
-                "So close. Agonising.",
-                "A paddle width from glory.",
-                "Nearly! The crowd gasps.",
-                "Millimetres. Absolute millimetres.",
-                "Just past the edge - cruel.",
-                "That one deserved to be saved.",
-                "Almost had it. Almost.",
-                "Heartbreak by a hair."
+                "OHHH! Fingertips away!",
+                "By a WHISKER! Unbelievable!",
+                "NO! So close - agony!",
+                "A paddle width from glory! CRUEL!",
+                "NEARLY! The whole gallery gasped!",
+                "MILLIMETRES! I cannot believe it!",
+                "Just past the edge - oh, that HURTS!",
+                "That deserved to be saved! ROBBERY!",
+                "ALMOST! Hands on heads!",
+                "Heartbreak by a HAIR!"
             ],
             edge: [
-                "Off the very tip!",
-                "Edge work! Filthy angle.",
-                "That is the corner of the corner.",
-                "Sharp! Where did that go?",
-                "Angled off the edge - outrageous.",
-                "Tip of the paddle, and away.",
-                "That is a wicked deflection.",
-                "Cut it fine and got away with it.",
-                "Edge return - pure nerve.",
-                "Barely made contact and made it count."
+                "OFF THE VERY TIP!",
+                "EDGE WORK! Filthy, filthy angle!",
+                "That is the corner of the CORNER!",
+                "SHARP! Where on earth did that go?!",
+                "Angled off the edge - OUTRAGEOUS!",
+                "Tip of the paddle and AWAY!",
+                "WICKED deflection!",
+                "Cut it fine and got away with it - cheeky!",
+                "Edge return! PURE NERVE!",
+                "Barely touched it and made it COUNT!"
             ],
             rally: [
-                "This rally refuses to end.",
-                "Back and forth, back and forth...",
-                "Neither one will blink.",
-                "Someone call an intermission.",
-                "This is turning into a siege.",
-                "Still going. Remarkable.",
-                "The ball is getting dizzy.",
-                "A proper old-fashioned duel.",
-                "No one wants to lose this point.",
-                "The rally of the match, surely.",
-                "Stamina on display here.",
-                "Whoever wins this deserves two points."
+                "This rally will NOT die!",
+                "Back and forth, back and forth - I am dizzy!",
+                "Neither one will BLINK!",
+                "Somebody call an intermission!",
+                "This is a SIEGE now!",
+                "STILL GOING! Remarkable scenes!",
+                "That poor ball!",
+                "A proper old-fashioned DUEL!",
+                "Nobody wants to lose this one!",
+                "Rally of the match, SURELY!",
+                "Look at the stamina on display!",
+                "Whoever wins this deserves TWO points!"
             ],
             stalemate: [
-                "We may be here all evening.",
-                "Is anyone going to end this?",
-                "The ball has filed for overtime.",
-                "This point has its own postcode now.",
-                "Somebody miss, please. Anybody.",
-                "I have aged noticeably during this rally."
+                "We may be here ALL EVENING!",
+                "Is ANYONE going to end this?!",
+                "This point has filed for OVERTIME!",
+                "This rally has its own POSTCODE!",
+                "Somebody miss! PLEASE! Anybody!",
+                "I have visibly AGED during this rally!"
             ],
             speed: [
-                "The pace is climbing!",
-                "That ball is picking up speed.",
-                "Getting quick now - hold on.",
-                "Blink and it is past you.",
-                "The ball has found another gear.",
-                "Serious velocity on that one.",
-                "It is flying now!",
-                "Reactions only from here.",
-                "That is genuinely fast.",
-                "Slow down! ...it will not."
+                "The pace is CLIMBING!",
+                "That ball is picking up SPEED!",
+                "Quick now - HOLD ON!",
+                "Blink and it is PAST you!",
+                "Another GEAR! Where did that come from?!",
+                "SERIOUS velocity on that one!",
+                "IT IS FLYING NOW!",
+                "Reactions only from here - good luck!",
+                "That is GENUINELY fast!",
+                "SLOW DOWN! ...it will not."
             ],
             streak: [
-                "Three on the bounce!",
-                "That is a run - momentum has picked a side.",
-                "Unanswered points piling up.",
-                "Someone find an answer, quickly.",
-                "A streak is forming.",
-                "This is becoming a procession.",
-                "Back to back to back!",
-                "The tide has clearly turned."
+                "THREE ON THE BOUNCE!",
+                "That is a RUN! Momentum has picked a side!",
+                "Unanswered points PILING UP!",
+                "Somebody find an answer - QUICKLY!",
+                "A streak is forming - and it is ruthless!",
+                "This is a PROCESSION now!",
+                "BACK TO BACK TO BACK!",
+                "The tide has WELL and truly turned!"
             ],
             comeback: [
-                "What a turnaround!",
-                "All square again - incredible.",
-                "From nowhere, we have a match!",
-                "The deficit is gone!",
-                "Never write anyone off.",
-                "That is a proper comeback.",
-                "Level pegging once more.",
-                "The gap has closed completely."
+                "WHAT A TURNAROUND! I do not believe it!",
+                "ALL SQUARE! From NOWHERE!",
+                "THEY ARE BACK! We have a MATCH!",
+                "The deficit is GONE! Absolutely gone!",
+                "NEVER write anyone off! NEVER!",
+                "That is a PROPER comeback! Take a bow!",
+                "LEVEL PEGGING! Are you watching this?!",
+                "The gap has CLOSED! Extraordinary!",
+                "FROM THE BRINK! What a fightback!",
+                "STUNNING recovery! The gallery is ROARING!"
             ],
             shutout: [
-                "Still nothing on the other side.",
-                "A blank scoreboard is a heavy thing.",
-                "One player is yet to trouble the scorer.",
-                "This is becoming one-sided.",
-                "Somebody get on the board!",
-                "A shutout is brewing here.",
-                "Mercy is not on the menu today."
+                "STILL nothing on the other side!",
+                "That blank scoreboard is getting HEAVY!",
+                "One player yet to trouble the scorer!",
+                "This is getting ONE-SIDED!",
+                "SOMEBODY get on the board!",
+                "A shutout is BREWING here!",
+                "No mercy on the menu today!"
             ],
             matchPoint: [
-                "Match point!",
-                "One point from the title.",
-                "This could be it.",
-                "Serving for the match.",
-                "The finish line is right there.",
-                "Nerves now. This is the moment.",
-                "One more and it is over.",
-                "Championship point - do not look away."
+                "MATCH POINT!",
+                "ONE point from the title!",
+                "THIS COULD BE IT!",
+                "Serving for the MATCH!",
+                "The finish line is RIGHT THERE!",
+                "Nerves of steel required - this is THE moment!",
+                "One more and it is ALL OVER!",
+                "CHAMPIONSHIP POINT! Do not look away!"
             ],
             clutch: [
-                "Ten seconds left!",
-                "Clock is nearly out!",
-                "Final moments now.",
-                "Time is almost gone!",
-                "Whatever happens, happens now.",
-                "The clock is the real opponent.",
-                "Seconds remaining - go!"
+                "TEN SECONDS LEFT!",
+                "The clock is nearly OUT!",
+                "FINAL MOMENTS!",
+                "Time is almost GONE!",
+                "Whatever happens, happens NOW!",
+                "The clock is the real opponent now!",
+                "SECONDS REMAINING - GO, GO, GO!"
             ],
             powerSpawn: [
-                "Something has appeared mid-court...",
-                "A power-up! Go and get it.",
-                "Chaos delivers a gift.",
-                "There is a prize in the middle.",
-                "Free upgrade, first come first served.",
-                "Careful - that one is live.",
-                "The court just changed the rules."
+                "OH! Something has appeared mid-court!",
+                "A POWER-UP! Go and get it!",
+                "Chaos delivers a GIFT!",
+                "There is a PRIZE in the middle!",
+                "Free upgrade - FIRST COME FIRST SERVED!",
+                "Careful! That one is LIVE!",
+                "The court just CHANGED THE RULES!"
             ],
             powerGrab: [
-                "Grabbed it!",
-                "Power-up claimed!",
-                "That is an advantage taken.",
-                "Snapped up mid-flight!",
-                "The paddle situation has changed.",
-                "Well, that seems unfair.",
-                "Collected - and it counts.",
-                "Advantage: whoever just did that."
+                "GRABBED IT!",
+                "POWER-UP CLAIMED!",
+                "That is an advantage TAKEN!",
+                "Snapped up MID-FLIGHT!",
+                "The paddle situation just CHANGED!",
+                "Oh, that is just UNFAIR!",
+                "COLLECTED - and it counts!",
+                "Advantage: whoever just did THAT!"
             ],
             win: [
-                "That is the match!",
-                "It is all over - what a finish.",
-                "Crown them. It is done.",
-                "Game, set, and Pong.",
-                "The victor takes the court.",
-                "Final whistle. Splendid stuff.",
-                "And that is that!",
-                "A worthy winner.",
-                "The gallery rises!",
-                "Match complete. Rematch?"
+                "THAT IS THE MATCH!",
+                "IT IS ALL OVER! What a finish!",
+                "CROWN THEM! It is done!",
+                "GAME, SET, AND PONG!",
+                "The victor takes the court!",
+                "FINAL WHISTLE! Splendid stuff!",
+                "AND THAT IS THAT!",
+                "A worthy winner - take a BOW!",
+                "THE GALLERY RISES!",
+                "Match complete! Somebody get me a rematch!"
             ],
             god: [
-                "That is... a very large paddle.",
-                "Someone has bent the rules.",
-                "Divine intervention on court.",
-                "That hardly seems sporting.",
-                "The wall has entered the game.",
-                "I will allow it. Reluctantly."
+                "That is... a VERY large paddle!",
+                "Someone has BENT THE RULES!",
+                "DIVINE INTERVENTION on court!",
+                "That hardly seems SPORTING!",
+                "The wall has entered the game!",
+                "I will allow it. Reluctantly!"
             ],
             chaos: [
-                "Chaos mode engaged. Anything goes.",
-                "The rulebook has been thrown out.",
-                "Buckle up - it is chaos now.",
-                "Order has left the building.",
-                "Expect the unexpected.",
-                "This should be entertaining."
+                "CHAOS MODE! Anything goes now!",
+                "The rulebook has been THROWN OUT!",
+                "BUCKLE UP - it is chaos!",
+                "Order has LEFT THE BUILDING!",
+                "Expect the UNEXPECTED!",
+                "Oh, this is going to be FUN!"
             ]
         };
 
@@ -584,7 +627,10 @@
         let rallyHits = 0, speedTier = 0, streak = 0, lastScorer = null;
         let saidClutch = false, cmtSeq = 0, cmtText = '', lastCmtSeq = -1;
         let cmtUntil = 0, cmtPriority = -1, cmtLastPick = {};
-        const stats = { rally: 0, speed: 0, lead: 0, leader: '', powers: 0, ticks: 0 };
+        const stats = { rally: 0, speed: 0, lead: 0, leader: '', powers: 0, ticks: 0,
+                        nearMisses: 0, comebacks: 0, leadChanges: 0 };
+        let lastLeadSign = 0, uiScale = 1, calibrateTimer = null;
+        let speedPop = null, popSeq = 0, popMph = 0, popSide = 'left', lastPopSeq = -1;
 
         const keys = {};
         const isTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
@@ -671,10 +717,27 @@
         });
         document.addEventListener('input', e => {
             if (e.target.classList.contains('sens-slider')) setSensitivity(e.target.value);
+            else if (e.target.classList.contains('scale-slider')) setUiScale(e.target.value);
         });
 
         /* ---------- Menus & toggles ---------- */
         function showMultiMenu() { el('menu').style.display = 'none'; el('multiMenu').style.display = 'flex'; }
+
+        function setUiScale(v, persist = true, showFrame = true) {
+            const n = parseFloat(v);
+            uiScale = Math.min(1.25, Math.max(0.5, Number.isFinite(n) ? n : 1));
+            document.documentElement.style.setProperty('--ui-scale', uiScale);
+            document.querySelectorAll('.scale-slider').forEach(s => {
+                if (parseFloat(s.value) !== uiScale) s.value = uiScale;
+            });
+            document.querySelectorAll('.scale-val').forEach(e => e.textContent = Math.round(uiScale * 100) + '%');
+            if (persist) { try { localStorage.setItem('pong-scale', uiScale); } catch (e) {} }
+            if (showFrame) {
+                el('game-wrapper').classList.add('calibrating');
+                clearTimeout(calibrateTimer);
+                calibrateTimer = setTimeout(() => el('game-wrapper').classList.remove('calibrating'), 1600);
+            }
+        }
 
         function setSensitivity(v, persist = true) {
             const n = parseFloat(v);
@@ -758,6 +821,8 @@
             el('winScreen').style.display = 'none';
             rallyHits = 0; speedTier = 0; streak = 0; lastScorer = null; saidClutch = false;
             stats.rally = stats.speed = stats.lead = stats.powers = stats.ticks = 0; stats.leader = '';
+            stats.nearMisses = stats.comebacks = stats.leadChanges = 0; lastLeadSign = 0;
+            speedPop = null;
             clearCommentary();
             resetBall(Math.random() < 0.5 ? 1 : -1);
             if (paused) togglePause();
@@ -783,18 +848,76 @@
             if (online && isHost) sendState(true, who);   // make sure the client hears about it
         }
 
+        /* How good a watch was that? Weighted from the things that actually make
+           a Pong match exciting: a close finish, long rallies, the lead changing
+           hands, near misses, pace, and fightbacks. */
+        function excitement() {
+            const margin = Math.abs(p1.score - p2.score);
+            let total =
+                Math.max(0, 26 - margin * 3.6) +
+                Math.min(20, stats.rally * 0.7) +
+                Math.min(20, stats.leadChanges * 4.5) +
+                Math.min(16, stats.nearMisses * 2.6) +
+                Math.min(12, Math.max(0, (stats.speed - START_SPEED) * 1.1)) +
+                Math.min(10, stats.comebacks * 10);
+            if (stats.ticks < 60 * 45) total *= 0.75;      // a 30-second match is no classic
+            return Math.max(0, Math.min(100, Math.round(total)));
+        }
+
+        const CROWD_TIERS = [
+            { min: 90, label: 'PANDEMONIUM',      line: 'The gallery has completely lost its mind!' },
+            { min: 75, label: 'STANDING OVATION', line: 'Every last one of them is on their feet!' },
+            { min: 60, label: 'ROARING',          line: 'Genuine cheers ringing round the court!' },
+            { min: 42, label: 'WARM APPLAUSE',    line: 'A good watch - they liked that one.' },
+            { min: 25, label: 'SCATTERED CLAPS',  line: 'Polite enough. They have seen better.' },
+            { min: 0,  label: 'POLITE GOLF CLAP', line: 'Somebody coughed. That was the highlight.' }
+        ];
+
+        /* Filtered noise burst - a crowd, roughly, scaled by how good it was. */
+        function crowdNoise(intensity) {
+            if (!soundOn || !audioCtx) return;
+            const dur = 0.8 + intensity * 1.7, rate = audioCtx.sampleRate;
+            const buf = audioCtx.createBuffer(1, Math.floor(rate * dur), rate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) {
+                const attack = Math.min(1, i / (rate * 0.15));
+                d[i] = (Math.random() * 2 - 1) * attack * (1 - i / d.length);
+            }
+            const src = audioCtx.createBufferSource(); src.buffer = buf;
+            const bp = audioCtx.createBiquadFilter();
+            bp.type = 'bandpass'; bp.frequency.value = 900 + intensity * 700; bp.Q.value = 0.6;
+            const g = audioCtx.createGain(); g.gain.value = 0.03 + intensity * 0.11;
+            src.connect(bp); bp.connect(g); g.connect(audioCtx.destination);
+            src.start();
+        }
+
+        /* Small pill near the goal that was just scored on. Deliberately off to
+           the side and short-lived so it never sits over the play. */
+        function popSpeed(m, side) {
+            speedPop = { mph: m, side: side, start: performance.now() };
+            if (online && isHost) { popSeq++; popMph = m; popSide = side; }
+        }
+
         function renderStats() {
             const mm = Math.floor(stats.ticks / 60 / 60), ss = Math.floor((stats.ticks / 60) % 60);
             const rows = [
                 ['Final score',     p1.score + ' - ' + p2.score],
                 ['Longest rally',   stats.rally + (stats.rally === 1 ? ' hit' : ' hits')],
-                ['Top ball speed',  stats.speed.toFixed(1)],
+                ['Top ball speed',  mph(stats.speed) + ' mph'],
                 ['Biggest lead',    stats.lead ? stats.lead + ' (' + stats.leader + ')' : 'level throughout'],
                 ['Power-ups taken', stats.powers],
                 ['Match time',      mm + ':' + String(ss).padStart(2, '0')]
             ];
-            el('statsBox').innerHTML = rows
-                .map(r => '<div class="stat-row"><span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('');
+            const ex = excitement();
+            const tier = CROWD_TIERS.find(t => ex >= t.min);
+            el('statsBox').innerHTML =
+                rows.map(r => '<div class="stat-row"><span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('') +
+                '<div class="crowd">' +
+                    '<div class="crowd-top"><span>Crowd approval</span><b>' + ex + '/100 &middot; ' + tier.label + '</b></div>' +
+                    '<div class="crowd-bar"><i style="width:' + ex + '%"></i></div>' +
+                    '<div class="crowd-line">' + tier.line + '</div>' +
+                '</div>';
+            crowdNoise(ex / 100);
         }
 
         function checkWin() {
@@ -1070,14 +1193,19 @@
             lastScorer = scorer;
             rallyHits = 0; speedTier = 0;
             play('score');
+            popSpeed(mph(ball.speed), scorer === p1 ? 'right' : 'left');
             const gap = Math.abs(p1.score - p2.score);
             if (gap > stats.lead) { stats.lead = gap; stats.leader = p1.score > p2.score ? 'P1' : 'P2'; }
 
-            if (missDist > 0 && missDist < 26) say('nearMiss', 3);
+            const sign = Math.sign(p1.score - p2.score);
+            if (sign !== 0 && lastLeadSign !== 0 && sign !== lastLeadSign) stats.leadChanges++;
+            if (sign !== 0) lastLeadSign = sign;
+
+            if (missDist > 0 && missDist < 26) { stats.nearMisses++; say('nearMiss', 3); }
             else say(Math.random() < 0.78 ? (scorer === p1 ? 'goalP1' : 'goalP2') : 'goal', 3);
 
             if (gameModeType === 'classic' && scorer.score === WIN_SCORE - 1) say('matchPoint', 5);
-            else if (wasOpp - wasScorer >= 3 && scorer.score >= opp.score) say('comeback', 4);
+            else if (wasOpp - wasScorer >= 3 && scorer.score >= opp.score) { stats.comebacks++; say('comeback', 5); }
             else if (opp.score === 0 && scorer.score >= 4) say('shutout', 4);
             else if (streak >= 3) say('streak', 4);
         }
@@ -1101,6 +1229,7 @@
                 s1: p1.score, s2: p2.score, time: timeLeft,
                 gm: gameModeType, chaos: chaosMode, pw: currentPowerUp,
                 cs: cmtSeq, ct: cmtText, ss: sfxSeq, sn: sfxName,
+                ps: popSeq, pm: popMph, pd: popSide,
                 st: over ? stats : undefined,
                 over: !!over, win: win
             });
@@ -1122,6 +1251,10 @@
                 if (d.ct) { showCommentary(d.ct); cmtUntil = performance.now() + 2700; cmtPriority = 0; }
             }
             chaosMode = d.chaos; currentPowerUp = d.pw;
+            if (d.ps !== undefined && d.ps !== lastPopSeq) {
+                lastPopSeq = d.ps;
+                if (d.pm) speedPop = { mph: d.pm, side: d.pd, start: performance.now() };
+            }
             if (d.ss !== undefined && d.ss !== lastSfxSeq) {
                 lastSfxSeq = d.ss;
                 if (d.sn && SFX[d.sn]) SFX[d.sn]();     // play, but do not re-broadcast
@@ -1293,6 +1426,56 @@
 
             ctx.fillStyle = "#fff";
             ctx.beginPath(); ctx.arc(ball.x, ball.y, B_RAD, 0, Math.PI * 2); ctx.fill();
+
+            if (gameActive) { drawSpeedBar(); drawSpeedPop(); }
+        }
+
+        /* Minimalist live speed readout along the very bottom of the court. */
+        function drawSpeedBar() {
+            const frac = Math.min(1, ball.speed / MAX_SPEED);
+            const hue = 180 - frac * 180;
+            ctx.fillStyle = "rgba(255,255,255,0.05)";
+            ctx.fillRect(0, H - 3, W, 3);
+            ctx.fillStyle = `hsl(${hue}, 100%, 55%)`;
+            ctx.fillRect(0, H - 3, W * frac, 3);
+
+            ctx.save();
+            ctx.font = "11px ui-monospace, monospace";
+            ctx.fillStyle = `hsla(${hue}, 100%, 70%, 0.45)`;
+            ctx.textAlign = "right";
+            ctx.fillText(mph(ball.speed) + " MPH", W - 8, H - 10);
+            ctx.restore();
+        }
+
+        function pillPath(x, y, w, h, r) {
+            ctx.beginPath();
+            if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);       ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+        }
+
+        function drawSpeedPop() {
+            if (!speedPop) return;
+            const age = (performance.now() - speedPop.start) / 1400;
+            if (age >= 1) { speedPop = null; return; }
+            const alpha = age < 0.12 ? age / 0.12 : 1 - (age - 0.12) / 0.88;
+            const x = speedPop.side === 'left' ? 128 : W - 128;
+            const y = 96 - age * 20;
+            const frac = Math.min(1, speedPop.mph / (MAX_SPEED * MPH_PER_UNIT));
+            const hue = 180 - frac * 180;
+
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+            pillPath(x - 54, y - 17, 108, 32, 16);
+            ctx.fillStyle = "rgba(10, 10, 15, 0.88)"; ctx.fill();
+            ctx.strokeStyle = `hsl(${hue}, 100%, 55%)`; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.fillStyle = `hsl(${hue}, 100%, 68%)`;
+            ctx.font = "bold 15px ui-monospace, monospace";
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(speedPop.mph + " MPH", x, y);
+            ctx.restore();
         }
 
         /* ---------- Boot ---------- */
@@ -1301,6 +1484,10 @@
             b.innerText = 'Sound: ' + (soundOn ? 'ON' : 'OFF');
             b.classList.toggle('active', soundOn);
         });
+
+        let savedScale = null;
+        try { savedScale = localStorage.getItem('pong-scale'); } catch (e) {}
+        setUiScale(savedScale === null ? 1 : savedScale, false, false);
 
         let savedSens = null;
         try { savedSens = localStorage.getItem('pong-sens'); } catch (e) {}

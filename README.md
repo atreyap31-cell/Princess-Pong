@@ -38,7 +38,7 @@ drag anywhere on the court.
 
 A commentator calls the match from between the scores - goals, near misses, long
 rallies, edge returns, streaks, comebacks, shutouts, match point, the closing
-seconds, power-ups and the final whistle. 157 written lines across 19 event
+seconds, power-ups and the final whistle. 159 written lines across 19 event
 types, picked at random and never repeating back to back. In online games the
 host's commentary is mirrored to the other player so you both read the same call.
 
@@ -50,10 +50,27 @@ single self-contained `index.html`. Toggle on the main menu or in the pause
 menu; the setting is remembered. In online games the host's sounds are
 mirrored so both players hear the same match.
 
-## Match stats
+## Match stats and crowd approval
 
 The win screen reports the final score, longest rally, top ball speed, biggest
-lead, power-ups collected and match time. Mirrored to both players online.
+lead, power-ups collected and match time, then rates the match out of 100 -
+weighted on how close the finish was, rally length, how often the lead changed
+hands, near misses, pace and comebacks. A blowout earns a polite golf clap; a
+10-9 thriller earns pandemonium, and the crowd is heard accordingly. Mirrored to
+both players online.
+
+## Ball speed
+
+A minimal bar along the bottom of the court tracks the live ball speed, with an
+mph readout beside it (a serve is about 21 mph, a maxed-out smash about 112). On
+every point a small pill pops up off to the side showing how fast the ball was
+travelling when it went in.
+
+## Screen size
+
+If the court does not sit right on your display, the Screen Size slider in
+settings scales the whole thing. A dashed frame appears while you drag - pull it
+until the frame meets the edges of your screen. Remembered between visits.
 
 ## Secrets
 
