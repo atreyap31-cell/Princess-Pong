@@ -72,6 +72,16 @@ If the court does not sit right on your display, the Screen Size slider in
 settings scales the whole thing. A dashed frame appears while you drag - pull it
 until the frame meets the edges of your screen. Remembered between visits.
 
+## Offline
+
+The game works with no internet at all. A service worker caches everything on
+first visit, PeerJS is served from this repo rather than a CDN, and there are no
+other external requests - so once you have opened it once it plays offline, and
+you can install it to a home screen and launch it like an app.
+
+Online multiplayer is the one exception: it needs a connection for signalling.
+The Online menu says so and disables itself when you are offline.
+
 ## Secrets
 
 - **God modes** (pause menu): *Owen* and *Michael* turn a paddle into a full wall.

@@ -4,7 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Princess Pong</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <meta name="theme-color" content="#0b0b0e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <!-- Served from this origin, so the page has no external dependencies and
+         works with no connection at all once it has been opened once. -->
+    <script src="peerjs.min.js" defer></script>
     <style>
         :root { --primary: #00ffcc; --secondary: #ff0066; --owen: #ff00ff; --michael: #0066ff; --bg: #0b0b0e; --accent: #ffcc00; }
         * { box-sizing: border-box; }
@@ -721,7 +730,17 @@
         });
 
         /* ---------- Menus & toggles ---------- */
-        function showMultiMenu() { el('menu').style.display = 'none'; el('multiMenu').style.display = 'flex'; }
+        function showMultiMenu() {
+            el('menu').style.display = 'none';
+            el('multiMenu').style.display = 'flex';
+            const off = navigator.onLine === false;
+            el('statusMsg').innerText = off
+                ? 'You are offline. Online play needs a connection - everything else works without one.'
+                : 'Both players need an internet connection.';
+            el('hostBtn').disabled = off; el('joinBtn').disabled = off;
+        }
+        window.addEventListener('online',  () => { if (el('multiMenu').style.display === 'flex') showMultiMenu(); });
+        window.addEventListener('offline', () => { if (el('multiMenu').style.display === 'flex') showMultiMenu(); });
 
         function setUiScale(v, persist = true, showFrame = true) {
             const n = parseFloat(v);
@@ -1500,6 +1519,14 @@
             ? 'Drag anywhere on your half of the court to move.<br>Tap <b>||</b> to pause. Long-press the score to open admin.'
             : 'P1 <b>W</b>/<b>S</b> &nbsp;·&nbsp; P2 <b>&uarr;</b>/<b>&darr;</b> &nbsp;·&nbsp; <b>Esc</b> pause &nbsp;·&nbsp; or drag with the mouse';
         draw();
+
+        /* Cache the game for offline play. Needs https or localhost; on file://
+           it simply does not register and the game still runs. */
+        if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(() => {});
+            });
+        }
     </script>
 </body>
 </html>
