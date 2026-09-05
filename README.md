@@ -82,7 +82,15 @@ you can install it to a home screen and launch it like an app.
 Online multiplayer is the one exception: it needs a connection for signalling.
 The Online menu says so and disables itself when you are offline.
 
-## Recording your own commentator
+## The commentator
+
+All 159 lines are voiced. Clips live in `voice/` as one short file per line,
+in Opus and AAC - only the format your browser supports is ever fetched, and the
+whole set is pulled into the offline cache in the background, so the commentary
+works with no connection like everything else. Toggle it with **Voice** in
+settings.
+
+## Re-recording the commentator
 
 Open **[record.html](https://atreyap31-cell.github.io/Princess-Pong/record.html)** and read the lines
 out. Nothing is installed and nothing is uploaded - it records in the browser and

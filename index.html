@@ -228,6 +228,7 @@
                     <div class="hint" style="margin-top: 2px;">Drag until the dashed frame meets your screen edges.</div>
                     <div class="row" style="margin-top: 10px;">
                         <button type="button" class="sound-btn toggle" onclick="toggleSound()">Sound: ON</button>
+                        <button type="button" class="voice-btn toggle" onclick="toggleVoice()">Voice: ON</button>
                     </div>
                     <div class="row" style="margin-top: 8px;">
                         <button type="button" onclick="init(1)">1 Player</button>
@@ -298,6 +299,7 @@
                     <div class="row">
                         <button type="button" id="chaosBtn" class="toggle" onclick="toggleChaos()">Chaos Mode: OFF</button>
                         <button type="button" class="sound-btn toggle" onclick="toggleSound()">Sound: ON</button>
+                        <button type="button" class="voice-btn toggle" onclick="toggleVoice()">Voice: ON</button>
                     </div>
                     <button type="button" class="subtle" style="margin-top: 14px;" onclick="returnToMenu()">Quit</button>
                 </div>
@@ -373,6 +375,7 @@
         let audioCtx = null, soundOn = true, audioReady = false;
 
         function unlockAudio() {
+            if (voiceOn) initVoice();
             if (audioReady) return;
             try {
                 audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -406,6 +409,7 @@
         };
 
         let sfxSeq = 0, sfxName = '', lastSfxSeq = -1;
+        let cmtId = '';
         function play(name) {
             if (online && !isHost) return;   // the client's sounds arrive mirrored from the host
             if (SFX[name]) SFX[name]();
@@ -421,6 +425,62 @@
             });
             try { localStorage.setItem('pong-sound', soundOn ? '1' : '0'); } catch (e) {}
             if (soundOn) play('grab');
+        }
+
+        /* ---------- Recorded commentary ----------
+           One short file per line. Individual clips rather than one sprite:
+           seeking into a long file needs HTTP range support and silently
+           played the wrong line where that was missing. */
+        let voiceOn = true, voiceEl = null, voiceIndex = null, voiceReady = false;
+        let voiceFmt = 'webm', voiceExt = 'webm';
+
+        function initVoice() {
+            if (voiceEl) return;
+            voiceEl = new Audio();
+            if (!voiceEl.canPlayType('audio/webm; codecs="opus"')) { voiceFmt = 'm4a'; voiceExt = 'm4a'; }
+            fetch('voice/index.json')
+                .then(r => r.json())
+                .then(j => { voiceIndex = j; voiceReady = true; warmVoiceCache(); })
+                .catch(() => { voiceReady = false; });
+        }
+
+        function voiceUrl(id) { return 'voice/' + voiceFmt + '/' + id + '.' + voiceExt; }
+
+        /* Pull the whole set into the offline cache in the background, so the
+           commentary survives losing the connection like the rest of the game. */
+        function warmVoiceCache() {
+            if (!window.caches || !voiceIndex) return;
+            caches.open('princess-pong-v3').then(c => {
+                let i = 0;
+                (function next() {
+                    if (i >= voiceIndex.ids.length) return;
+                    const batch = voiceIndex.ids.slice(i, i + 12).map(voiceUrl);
+                    i += 12;
+                    c.addAll(batch).catch(() => {}).then(() => setTimeout(next, 120));
+                })();
+            }).catch(() => {});
+        }
+
+        function playVoice(id) {
+            if (!voiceOn || !voiceReady || !id || !voiceIndex) return;
+            if (!voiceIndex.dur[id]) return;          // never recorded: text only
+            try {
+                voiceEl.pause();
+                voiceEl.src = voiceUrl(id);
+                const pr = voiceEl.play();
+                if (pr && pr.catch) pr.catch(() => {});
+            } catch (e) {}
+        }
+
+        function toggleVoice() {
+            voiceOn = !voiceOn;
+            if (voiceOn) initVoice();
+            else { try { voiceEl && voiceEl.pause(); } catch (e) {} }
+            document.querySelectorAll('.voice-btn').forEach(b => {
+                b.innerText = 'Voice: ' + (voiceOn ? 'ON' : 'OFF');
+                b.classList.toggle('active', voiceOn);
+            });
+            try { localStorage.setItem('pong-voice', voiceOn ? '1' : '0'); } catch (e) {}
         }
 
         /* ---------- Live commentary ----------
@@ -1176,7 +1236,9 @@
             cmtPriority = priority;
             cmtUntil = now + (priority >= 4 ? 3400 : priority >= 3 ? 2700 : 2100);
             cmtSeq++; cmtText = lines[i];
+            cmtId = kind + '_' + String(i).padStart(2, '0');
             showCommentary(lines[i]);
+            playVoice(cmtId);
         }
 
         function showCommentary(text) {
@@ -1247,7 +1309,7 @@
                 p1y: p1.y, p1h: p1.h, p2h: p2.h,
                 s1: p1.score, s2: p2.score, time: timeLeft,
                 gm: gameModeType, chaos: chaosMode, pw: currentPowerUp,
-                cs: cmtSeq, ct: cmtText, ss: sfxSeq, sn: sfxName,
+                cs: cmtSeq, ct: cmtText, ci: cmtId, ss: sfxSeq, sn: sfxName,
                 ps: popSeq, pm: popMph, pd: popSide,
                 st: over ? stats : undefined,
                 over: !!over, win: win
@@ -1267,7 +1329,10 @@
             if (d.gm !== gameModeType) setGameMode(d.gm);
             if (d.cs !== undefined && d.cs !== lastCmtSeq) {
                 lastCmtSeq = d.cs;
-                if (d.ct) { showCommentary(d.ct); cmtUntil = performance.now() + 2700; cmtPriority = 0; }
+                if (d.ct) {
+                    showCommentary(d.ct); cmtUntil = performance.now() + 2700; cmtPriority = 0;
+                    playVoice(d.ci);
+                }
             }
             chaosMode = d.chaos; currentPowerUp = d.pw;
             if (d.ps !== undefined && d.ps !== lastPopSeq) {
@@ -1499,6 +1564,11 @@
 
         /* ---------- Boot ---------- */
         try { soundOn = localStorage.getItem('pong-sound') !== '0'; } catch (e) {}
+        try { voiceOn = localStorage.getItem('pong-voice') !== '0'; } catch (e) {}
+        document.querySelectorAll('.voice-btn').forEach(b => {
+            b.innerText = 'Voice: ' + (voiceOn ? 'ON' : 'OFF');
+            b.classList.toggle('active', voiceOn);
+        });
         document.querySelectorAll('.sound-btn').forEach(b => {
             b.innerText = 'Sound: ' + (soundOn ? 'ON' : 'OFF');
             b.classList.toggle('active', soundOn);
