@@ -82,14 +82,6 @@ you can install it to a home screen and launch it like an app.
 Online multiplayer is the one exception: it needs a connection for signalling.
 The Online menu says so and disables itself when you are offline.
 
-## The commentator
-
-All 159 lines are voiced. Clips live in `voice/` as one short file per line,
-in Opus and AAC - only the format your browser supports is ever fetched, and the
-whole set is pulled into the offline cache in the background, so the commentary
-works with no connection like everything else. Toggle it with **Voice** in
-settings.
-
 ## Re-recording the commentator
 
 Open **[record.html](https://atreyap31-cell.github.io/Princess-Pong/record.html)** and read the lines
@@ -107,5 +99,10 @@ keeps your takes in local storage, so you can stop and come back.
 - **God modes** (pause menu): *Owen* and *Michael* turn a paddle into a full wall.
 - **Chaos mode** (pause menu): power-ups spawn mid-court — green extends the paddle
   that hits it, magenta shrinks the opponent's.
+- **The commentator:** a recorded human voice calls the whole match - every goal,
+  near miss, rally, comeback and win. Locked by default. Press **PW** on the menu
+  and enter the password to unlock it; after that a **Voice** toggle appears in
+  settings and the setting is remembered. Until it is unlocked no audio is
+  downloaded at all.
 - **Admin terminal:** hold `W` + `P` on a keyboard, or long-press the scoreboard on a
   phone. Sets the score, the clock, and auto-play for either paddle.

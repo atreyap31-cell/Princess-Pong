@@ -229,6 +229,7 @@
                     <div class="row" style="margin-top: 10px;">
                         <button type="button" class="sound-btn toggle" onclick="toggleSound()">Sound: ON</button>
                         <button type="button" class="voice-btn toggle" onclick="toggleVoice()">Voice: ON</button>
+                        <button type="button" class="pw-btn subtle" onclick="openPw()" title="Something is locked in here">PW</button>
                     </div>
                     <div class="row" style="margin-top: 8px;">
                         <button type="button" onclick="init(1)">1 Player</button>
@@ -307,7 +308,9 @@
 
             <div id="secretWindow" class="overlay" style="display: none;">
                 <h2 style="color: var(--accent);">ADMIN TERMINAL</h2>
-                <input type="password" id="adminPass" placeholder="PASSWORD" autocomplete="off">
+                <input type="password" id="adminPass" placeholder="PASSWORD" autocomplete="off"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();checkAdmin();}">
+                <div id="adminMsg" class="hint" style="margin-top: 8px; min-height: 1.2em;"></div>
                 <div id="cheats" style="display: none; margin-top: 10px;">
                     <div class="row">
                         <input type="number" id="chP1" placeholder="P1" style="width: 80px;">
@@ -431,11 +434,11 @@
            One short file per line. Individual clips rather than one sprite:
            seeking into a long file needs HTTP range support and silently
            played the wrong line where that was missing. */
-        let voiceOn = true, voiceEl = null, voiceIndex = null, voiceReady = false;
+        let voiceOn = true, voiceUnlocked = false, voiceEl = null, voiceIndex = null, voiceReady = false;
         let voiceFmt = 'webm', voiceExt = 'webm';
 
         function initVoice() {
-            if (voiceEl) return;
+            if (voiceEl || !voiceUnlocked) return;   // locked: never fetch the audio
             voiceEl = new Audio();
             if (!voiceEl.canPlayType('audio/webm; codecs="opus"')) { voiceFmt = 'm4a'; voiceExt = 'm4a'; }
             fetch('voice/index.json')
@@ -462,7 +465,7 @@
         }
 
         function playVoice(id) {
-            if (!voiceOn || !voiceReady || !id || !voiceIndex) return;
+            if (!voiceUnlocked || !voiceOn || !voiceReady || !id || !voiceIndex) return;
             if (!voiceIndex.dur[id]) return;          // never recorded: text only
             try {
                 voiceEl.pause();
@@ -473,14 +476,32 @@
         }
 
         function toggleVoice() {
+            if (!voiceUnlocked) return;
             voiceOn = !voiceOn;
             if (voiceOn) initVoice();
             else { try { voiceEl && voiceEl.pause(); } catch (e) {} }
+            try { localStorage.setItem('pong-voice', voiceOn ? '1' : '0'); } catch (e) {}
+            applyVoiceUI();
+        }
+
+        /* The toggle only exists once the commentator has been unlocked. */
+        function applyVoiceUI() {
             document.querySelectorAll('.voice-btn').forEach(b => {
+                b.style.display = voiceUnlocked ? 'inline-block' : 'none';
                 b.innerText = 'Voice: ' + (voiceOn ? 'ON' : 'OFF');
                 b.classList.toggle('active', voiceOn);
             });
-            try { localStorage.setItem('pong-voice', voiceOn ? '1' : '0'); } catch (e) {}
+            document.querySelectorAll('.pw-btn').forEach(b => {
+                b.style.display = voiceUnlocked ? 'none' : 'inline-block';
+            });
+        }
+
+        function unlockVoice(save) {
+            voiceUnlocked = true;
+            voiceOn = true;
+            if (save) { try { localStorage.setItem('pong-voice-unlocked', '1'); } catch (e) {} }
+            applyVoiceUI();
+            initVoice();
         }
 
         /* ---------- Live commentary ----------
@@ -1459,8 +1480,31 @@
 
         /* ---------- Admin ---------- */
         function openAdmin() { paused = true; el('pauseMenu').style.display = 'none'; el('secretWindow').style.display = 'flex'; }
-        function closeAdmin() { el('secretWindow').style.display = 'none'; paused = false; }
-        function checkAdmin() { if (el('adminPass').value === "dieh0neydie") el('cheats').style.display = 'block'; }
+        function closeAdmin() {
+            el('secretWindow').style.display = 'none';
+            if (gameActive) { paused = false; }
+            else { el('menu').style.display = 'flex'; }   // opened from the menu
+        }
+        function checkAdmin() {
+            if (el('adminPass').value !== "dieh0neydie") {
+                el('adminMsg').innerText = 'Wrong password.';
+                return;
+            }
+            el('cheats').style.display = 'block';
+            const wasLocked = !voiceUnlocked;
+            unlockVoice(true);
+            el('adminMsg').innerHTML = wasLocked
+                ? '<span style="color:var(--primary)">Commentator unlocked. Voice is on.</span>'
+                : 'Unlocked.';
+        }
+
+        function openPw() {
+            document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
+            el('secretWindow').style.display = 'flex';
+            el('adminMsg').innerText = '';
+            el('adminPass').value = '';
+            el('adminPass').focus();
+        }
         function applyCheats() {
             const num = (v, fallback) => { const x = parseInt(v, 10); return Number.isFinite(x) ? x : fallback; };
             p1.score = Math.max(0, num(el('chP1').value, p1.score));
@@ -1565,10 +1609,9 @@
         /* ---------- Boot ---------- */
         try { soundOn = localStorage.getItem('pong-sound') !== '0'; } catch (e) {}
         try { voiceOn = localStorage.getItem('pong-voice') !== '0'; } catch (e) {}
-        document.querySelectorAll('.voice-btn').forEach(b => {
-            b.innerText = 'Voice: ' + (voiceOn ? 'ON' : 'OFF');
-            b.classList.toggle('active', voiceOn);
-        });
+        try { voiceUnlocked = localStorage.getItem('pong-voice-unlocked') === '1'; } catch (e) {}
+        applyVoiceUI();
+        if (voiceUnlocked && voiceOn) initVoice();
         document.querySelectorAll('.sound-btn').forEach(b => {
             b.innerText = 'Sound: ' + (soundOn ? 'ON' : 'OFF');
             b.classList.toggle('active', soundOn);
