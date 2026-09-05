@@ -42,6 +42,19 @@ seconds, power-ups and the final whistle. 157 written lines across 19 event
 types, picked at random and never repeating back to back. In online games the
 host's commentary is mirrored to the other player so you both read the same call.
 
+## Sound
+
+Paddle hits (pitched to ball speed), wall bounces, scoring, power-ups and a
+win fanfare, all synthesised with the Web Audio API - no audio files, still a
+single self-contained `index.html`. Toggle on the main menu or in the pause
+menu; the setting is remembered. In online games the host's sounds are
+mirrored so both players hear the same match.
+
+## Match stats
+
+The win screen reports the final score, longest rally, top ball speed, biggest
+lead, power-ups collected and match time. Mirrored to both players online.
+
 ## Secrets
 
 - **God modes** (pause menu): *Owen* and *Michael* turn a paddle into a full wall.
