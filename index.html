@@ -721,6 +721,10 @@
                         nearMisses: 0, comebacks: 0, leadChanges: 0 };
         let lastLeadSign = 0, uiScale = 1, calibrateTimer = null;
         let speedPop = null, popSeq = 0, popMph = 0, popSide = 'left', lastPopSeq = -1;
+        /* Online only: a 3-2-1 before play begins and after every unpause, so
+           nobody comes back to a ball already in flight. */
+        let countdown = 0, lastCountShown = 0, goFlashUntil = 0;
+        const startCountdown = sec => { countdown = sec; };
 
         const keys = {};
         const isTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
@@ -889,6 +893,7 @@
             if (el('secretWindow').style.display === 'flex') return;
             if (online && !isHost) return;   // only the host owns the simulation
             paused = !paused;
+            if (!paused && online) startCountdown(3);   // never drop straight back into play
             el('pauseMenu').style.display = paused ? 'flex' : 'none';
         }
 
@@ -925,6 +930,7 @@
             speedPop = null;
             clearCommentary();
             resetBall(Math.random() < 0.5 ? 1 : -1);
+            if (online) startCountdown(3);
             if (paused) togglePause();
             updateHUD();
             say('start', 2);
@@ -1086,8 +1092,8 @@
         }
 
         function hostUpdate() {
-            stats.ticks++;
-            if (gameModeType === 'timed') {
+            if (countdown <= 0) stats.ticks++;
+            if (gameModeType === 'timed' && countdown <= 0) {
                 timeLeft -= 1 / 60;
                 if (!saidClutch && timeLeft <= 10) { saidClutch = true; say('clutch', 4); }
                 if (timeLeft <= 0) {
@@ -1126,6 +1132,18 @@
                 } else {
                     runBot();
                 }
+            }
+
+            // Counting in: paddles are live so both players can settle, but the
+            // ball, the clock and the score all wait.
+            if (countdown > 0) {
+                countdown = Math.max(0, countdown - 1 / 60);
+                [p1, p2].forEach(p => {
+                    if (p.y < 0) p.y = 0;
+                    if (p.y > H - p.h) p.y = H - p.h;
+                });
+                sendState(false, null);
+                return;
             }
 
             // --- Ball ---
@@ -1331,7 +1349,7 @@
                 s1: p1.score, s2: p2.score, time: timeLeft,
                 gm: gameModeType, chaos: chaosMode, pw: currentPowerUp,
                 cs: cmtSeq, ct: cmtText, ci: cmtId, ss: sfxSeq, sn: sfxName,
-                ps: popSeq, pm: popMph, pd: popSide,
+                ps: popSeq, pm: popMph, pd: popSide, cd: countdown,
                 st: over ? stats : undefined,
                 over: !!over, win: win
             });
@@ -1356,6 +1374,7 @@
                 }
             }
             chaosMode = d.chaos; currentPowerUp = d.pw;
+            if (typeof d.cd === 'number') countdown = d.cd;
             if (d.ps !== undefined && d.ps !== lastPopSeq) {
                 lastPopSeq = d.ps;
                 if (d.pm) speedPop = { mph: d.pm, side: d.pd, start: performance.now() };
@@ -1556,6 +1575,50 @@
             ctx.beginPath(); ctx.arc(ball.x, ball.y, B_RAD, 0, Math.PI * 2); ctx.fill();
 
             if (gameActive) { drawSpeedBar(); drawSpeedPop(); }
+            drawCountdown();
+        }
+
+        /* 3 - 2 - 1 - GO, with a beep as each number lands. */
+        function drawCountdown() {
+            const now = performance.now();
+            if (countdown > 0) {
+                const n = Math.ceil(countdown);
+                if (n !== lastCountShown) {
+                    lastCountShown = n;
+                    tone(n <= 1 ? 760 : 480, 0.12, 'square', 0.06);
+                }
+                const age = 1 - (countdown - Math.floor(countdown) || 1);
+                const scale = 1.3 - age * 0.35;
+                const alpha = age < 0.12 ? age / 0.12 : age > 0.86 ? (1 - age) / 0.14 : 1;
+                paintCount(String(n), n >= 3 ? '#00ffcc' : n === 2 ? '#ffcc00' : '#ff0066',
+                           scale, Math.max(0, Math.min(1, alpha)));
+                return;
+            }
+            if (lastCountShown > 0) {           // just reached zero
+                lastCountShown = 0;
+                goFlashUntil = now + 550;
+                tone(980, 0.18, 'square', 0.07);
+            }
+            if (now < goFlashUntil) {
+                const k = 1 - (goFlashUntil - now) / 550;
+                paintCount('GO!', '#ffffff', 1 + k * 0.5, 1 - k);
+            }
+        }
+
+        function paintCount(text, colour, scale, alpha) {
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.55;
+            ctx.fillStyle = '#0b0b0e';
+            ctx.fillRect(0, 0, W, H);
+            ctx.globalAlpha = alpha;
+            ctx.translate(W / 2, H / 2);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = colour;
+            ctx.font = 'bold 130px ui-monospace, monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.shadowColor = colour; ctx.shadowBlur = 28;
+            ctx.fillText(text, 0, 0);
+            ctx.restore();
         }
 
         /* Minimalist live speed readout along the very bottom of the court. */
