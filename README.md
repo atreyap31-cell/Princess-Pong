@@ -112,6 +112,18 @@ keeps your takes in local storage, so you can stop and come back.
 - **Export** produces a single `.zip` - the only file you ever download.
 - Partial sets are fine. Lines you skip just stay as on-screen text in the game.
 
+## Awards
+
+26 awards, from playing your first match to beating Insane without conceding a
+point, surviving a 100-hit rally, or finishing a match the crowd rates 90 out of
+100. They unlock as you play, with a note at the bottom of the screen, and the
+Awards screen shows what is left to find.
+
+They are saved in your browser, which means per browser and per device: they do
+not follow you from your phone to your laptop, and clearing site data clears
+them. **Backup** turns your progress into a code you can paste into **Restore**
+somewhere else.
+
 ## Secrets
 
 - **God modes** (pause menu): *Owen* and *Michael* turn a paddle into a full wall.

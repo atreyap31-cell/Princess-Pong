@@ -204,6 +204,45 @@
         }
         .crowd-line { margin-top: 8px; font-size: 12.5px; color: var(--primary); font-style: italic; }
 
+        /* Award unlocked - slides up from the bottom, clear of the court and the
+           commentary line. */
+        #awardToast {
+            position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 24px);
+            z-index: 40; pointer-events: none; opacity: 0;
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(16, 16, 22, 0.96); border: 2px solid var(--accent);
+            border-radius: 12px; padding: 10px 16px; max-width: min(92vw, 380px);
+            box-shadow: 0 10px 34px rgba(0, 0, 0, 0.65);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        #awardToast.show { opacity: 1; transform: translate(-50%, 0); }
+        #awardToast .medal { font-size: 24px; line-height: 1; }
+        #awardToast .at-name { font-weight: 800; font-size: 14px; color: var(--accent); }
+        #awardToast .at-desc { font-size: 11.5px; color: #9a9aa4; margin-top: 1px; }
+
+        #awardGrid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+            gap: 8px; width: min(660px, 92vw); margin: 10px 0 4px;
+            max-height: 58vh; overflow-y: auto; padding-right: 4px;
+        }
+        .award {
+            display: flex; gap: 9px; align-items: flex-start; text-align: left;
+            background: #14141a; border: 1px solid #26262e; border-radius: 9px; padding: 8px 10px;
+        }
+        .award.got { border-color: var(--accent); background: #1b1710; }
+        .award .medal { font-size: 19px; line-height: 1.1; filter: grayscale(1) opacity(0.35); }
+        .award.got .medal { filter: none; }
+        .award .an { font-size: 12px; font-weight: 700; color: #6d6d78; }
+        .award.got .an { color: var(--accent); }
+        .award .ad { font-size: 10.5px; color: #5d5d68; margin-top: 2px; line-height: 1.35; }
+        .award.got .ad { color: #9a9aa4; }
+        #awardCount { font-size: 12px; color: var(--primary); letter-spacing: 1px; }
+        #saveCode {
+            width: min(420px, 88vw); height: 54px; font-size: 11px; font-family: ui-monospace, monospace;
+            background: #000; color: var(--primary); border: 1px solid #333; border-radius: 6px;
+            padding: 6px; resize: none; display: none; margin-top: 8px;
+        }
+
         #rotate-hint { display: none; font-size: 11px; color: var(--accent); margin-top: 10px; }
 
         /* Short viewports: shrink the headline furniture so the menu still fits
@@ -245,6 +284,8 @@
 </head>
 <body>
 
+    <div id="awardToast"><div class="medal"></div><div><div class="at-name"></div><div class="at-desc"></div></div></div>
+
     <div id="game-wrapper">
         <div id="ui-header">
             <div id="p1Score" style="color: var(--primary)">0</div>
@@ -279,9 +320,22 @@
                     </div>
                     <div class="row" style="margin-top: 8px;">
                         <button type="button" class="subtle" onclick="openSettings()">Settings</button>
+                        <button type="button" class="subtle" onclick="openAwards()">Awards</button>
                     </div>
                     <div class="hint" id="controlsHint"></div>
                     <div id="rotate-hint">Turn your phone sideways for a bigger court</div>
+                </div>
+            </div>
+
+            <div id="awardsMenu" class="overlay" style="display: none;">
+                <h2 style="letter-spacing: 4px;">AWARDS</h2>
+                <div id="awardCount">0 of 0</div>
+                <div id="awardGrid"></div>
+                <textarea id="saveCode" readonly aria-label="Backup code"></textarea>
+                <div class="row" style="margin-top: 10px;">
+                    <button type="button" class="subtle" onclick="showBackup()">Backup</button>
+                    <button type="button" class="subtle" onclick="restoreBackup()">Restore</button>
+                    <button type="button" onclick="closeAwards()">Back</button>
                 </div>
             </div>
 
@@ -430,6 +484,174 @@
             { name: 'Insane', cap: 19.0, accel: 0.75, err: 14, blunder: 0.01, predict: true,  reactX: 0   }
         ];
 
+
+        /* ---------- Awards ----------
+           Lifetime stats and unlocks in localStorage. Per browser, per device -
+           see the Backup button for moving them. */
+        const AWARDS = [
+            { id:'first_serve', m:'🏓', n:'First Serve',    d:'Play your first match',              t:s=>s.matches>=1 },
+            { id:'regular',     m:'🎯', n:'Regular',        d:'Play 10 matches',                    t:s=>s.matches>=10 },
+            { id:'devoted',     m:'🔥', n:'Devoted',        d:'Play 50 matches',                    t:s=>s.matches>=50 },
+            { id:'first_win',   m:'⭐', n:'On the Board',   d:'Win your first match',               t:s=>s.wins>=1 },
+            { id:'champion',    m:'🏆', n:'Champion',       d:'Win 10 matches',                     t:s=>s.wins>=10 },
+            { id:'dynasty',     m:'👑', n:'Dynasty',        d:'Win 25 matches',                     t:s=>s.wins>=25 },
+            { id:'shutout',     m:'🧱', n:'Clean Sheet',    d:'Win without conceding a point',      t:s=>s.shutouts>=1 },
+            { id:'comeback',    m:'💪', n:'Comeback Kid',   d:'Win after trailing by 4 or more',    t:s=>s.comebackWins>=1 },
+            { id:'nailbiter',   m:'😰', n:'Nail Biter',     d:'Win a match by a single point',      t:s=>s.nailBiters>=1 },
+            { id:'beat_hard',   m:'🥈', n:'The Hard Way',   d:'Beat the bot on Hard',               t:s=>s.bestWinDiff>=2 },
+            { id:'beat_insane', m:'🥇', n:'Giant Killer',   d:'Beat the bot on Insane',             t:s=>s.bestWinDiff>=3 },
+            { id:'flawless',    m:'💎', n:'Flawless',       d:'Beat Insane without conceding',      t:s=>s.insaneShutout>=1 },
+            { id:'rally25',     m:'🏸', n:'Rally Master',   d:'Survive a 25-hit rally',             t:s=>s.bestRally>=25 },
+            { id:'rally50',     m:'🌀', n:'Endurance',      d:'Survive a 50-hit rally',             t:s=>s.bestRally>=50 },
+            { id:'rally100',    m:'🗿', n:'Immovable',      d:'Survive a 100-hit rally',            t:s=>s.bestRally>=100 },
+            { id:'fast80',      m:'💨', n:'Quick',          d:'Hit 80 mph',                         t:s=>s.topMph>=80 },
+            { id:'fast110',     m:'⚡', n:'Supersonic',     d:'Hit 110 mph',                        t:s=>s.topMph>=110 },
+            { id:'crowd75',     m:'👏', n:'Crowd Pleaser',  d:'Finish a match rated 75 or more',    t:s=>s.bestCrowd>=75 },
+            { id:'crowd90',     m:'🎆', n:'Pandemonium',    d:'Finish a match rated 90 or more',    t:s=>s.bestCrowd>=90 },
+            { id:'local2p',     m:'🤝', n:'Two\u2019s Company', d:'Play a two-player match',       t:s=>s.local2p>=1 },
+            { id:'online1',     m:'🌍', n:'Long Distance',  d:'Play a match online',                t:s=>s.online>=1 },
+            { id:'online_win',  m:'📡', n:'Better Half',    d:'Win a match online',                 t:s=>s.onlineWins>=1 },
+            { id:'chaos10',     m:'🎁', n:'Chaos Agent',    d:'Collect 10 power-ups',               t:s=>s.powerups>=10 },
+            { id:'godmode',     m:'😇', n:'Hardly Sporting',d:'Win with a god mode switched on',    t:s=>s.godWins>=1 },
+            { id:'voice',       m:'🎙️', n:'The Commentator',d:'Unlock the recorded commentary',    t:s=>s.voiceFound>=1 },
+            { id:'allnighter',  m:'🌙', n:'Night Owl',      d:'Play a match between 1am and 5am',   t:s=>s.nightOwl>=1 }
+        ];
+
+        const BLANK_STATS = { matches:0, wins:0, shutouts:0, comebackWins:0, nailBiters:0,
+            bestWinDiff:-1, insaneShutout:0, bestRally:0, topMph:0, bestCrowd:0,
+            local2p:0, online:0, onlineWins:0, powerups:0, godWins:0, voiceFound:0, nightOwl:0 };
+
+        let awards = { got: {}, stats: Object.assign({}, BLANK_STATS) };
+
+        function loadAwards() {
+            try {
+                const raw = localStorage.getItem('pong-awards');
+                if (raw) {
+                    const j = JSON.parse(raw);
+                    awards.got = j.got || {};
+                    awards.stats = Object.assign({}, BLANK_STATS, j.stats || {});
+                }
+            } catch (e) {}
+        }
+        function saveAwards() {
+            try { localStorage.setItem('pong-awards', JSON.stringify(awards)); } catch (e) {}
+        }
+
+        const bump = (k, n) => { awards.stats[k] = (awards.stats[k] || 0) + (n === undefined ? 1 : n); };
+        const best = (k, v) => { if (v > (awards.stats[k] || 0)) awards.stats[k] = v; };
+
+        const toastQueue = [];
+        let toastBusy = false;
+
+        function checkAwards() {
+            let fresh = false;
+            for (const a of AWARDS) {
+                if (awards.got[a.id]) continue;
+                let ok = false;
+                try { ok = a.t(awards.stats); } catch (e) {}
+                if (ok) { awards.got[a.id] = Date.now(); toastQueue.push(a); fresh = true; }
+            }
+            saveAwards();
+            if (fresh) runToast();
+        }
+
+        function runToast() {
+            if (toastBusy || !toastQueue.length) return;
+            toastBusy = true;
+            const a = toastQueue.shift(), t = el('awardToast');
+            t.querySelector('.medal').textContent = a.m;
+            t.querySelector('.at-name').textContent = 'Award unlocked \u2014 ' + a.n;
+            t.querySelector('.at-desc').textContent = a.d;
+            t.classList.add('show');
+            tone(660, 0.10, 'square', 0.05);
+            tone(990, 0.16, 'square', 0.05, 0, 0.10);
+            setTimeout(() => {
+                t.classList.remove('show');
+                setTimeout(() => { toastBusy = false; runToast(); }, 260);
+            }, 2600);
+        }
+
+        /* Called once a match finishes, from whichever side is looking at it. */
+        function recordMatch(who) {
+            const st = awards.stats;
+            const iAmP1 = !online || isHost;
+            const mine = iAmP1 ? p1.score : p2.score;
+            const theirs = iAmP1 ? p2.score : p1.score;
+            const iWon = who === (iAmP1 ? 'P1' : 'P2');
+
+            bump('matches');
+            if (online) bump('online'); else if (isLocal2P()) bump('local2p');
+            const hr = new Date().getHours();
+            if (hr >= 1 && hr < 5) bump('nightOwl');
+
+            best('bestRally', stats.rally);
+            best('topMph', mph(stats.speed));
+            best('bestCrowd', excitement());
+            bump('powerups', stats.powers);
+
+            if (iWon) {
+                bump('wins');
+                if (online) bump('onlineWins');
+                if (theirs === 0) bump('shutouts');
+                if (Math.abs(mine - theirs) === 1) bump('nailBiters');
+                if (stats.comebacks > 0) bump('comebackWins');
+                if ((owenMode || michaelMode)) bump('godWins');
+                if (!online && mode === 1) {
+                    best('bestWinDiff', difficulty);
+                    if (difficulty === 3 && theirs === 0) bump('insaneShutout');
+                }
+            }
+            checkAwards();
+        }
+
+        function openAwards() {
+            el('menu').style.display = 'none';
+            el('awardsMenu').style.display = 'flex';
+            el('saveCode').style.display = 'none';
+            renderAwards();
+        }
+        function closeAwards() {
+            el('awardsMenu').style.display = 'none';
+            el('menu').style.display = 'flex';
+        }
+
+        function renderAwards() {
+            const got = AWARDS.filter(a => awards.got[a.id]).length;
+            el('awardCount').textContent = got + ' of ' + AWARDS.length;
+            el('awardGrid').innerHTML = AWARDS.map(a =>
+                '<div class="award' + (awards.got[a.id] ? ' got' : '') + '">' +
+                    '<div class="medal">' + a.m + '</div>' +
+                    '<div><div class="an">' + a.n + '</div><div class="ad">' + a.d + '</div></div>' +
+                '</div>').join('');
+        }
+
+        /* Awards live in this browser only. These two move them elsewhere. */
+        function showBackup() {
+            const box = el('saveCode');
+            box.style.display = 'block';
+            box.readOnly = true;
+            try { box.value = btoa(unescape(encodeURIComponent(JSON.stringify(awards)))); }
+            catch (e) { box.value = 'Could not build a code.'; }
+            box.focus(); box.select();
+        }
+        function restoreBackup() {
+            const box = el('saveCode');
+            if (box.style.display !== 'block' || box.readOnly) {
+                box.style.display = 'block';
+                box.readOnly = false;
+                box.value = '';
+                box.placeholder = 'Paste a backup code here, then press Restore again';
+                box.focus();
+                return;
+            }
+            try {
+                const j = JSON.parse(decodeURIComponent(escape(atob(box.value.trim()))));
+                awards.got = j.got || {};
+                awards.stats = Object.assign({}, BLANK_STATS, j.stats || {});
+                saveAwards(); renderAwards();
+                box.readOnly = true; box.value = 'Restored.';
+            } catch (e) { box.value = 'That code could not be read.'; }
+        }
 
         /* ---------- Sound ----------
            Synthesised with the Web Audio API so the game stays a single
@@ -808,6 +1030,7 @@
         window.addEventListener("keydown", e => {
             if (e.code === "Escape") {
                 e.preventDefault();
+                if (el('awardsMenu').style.display === 'flex') { closeAwards(); return; }
                 if (el('settingsMenu').style.display === 'flex') { closeSettings(); return; }
                 togglePause();
             }
@@ -1105,6 +1328,7 @@
             cmtUntil = 0; cmtPriority = -1; say('win', 6);
             play('win');
             buzz([50, 60, 50, 60, 110]);
+            recordMatch(who);
             updateHUD();
             renderStats();
             if (online && isHost) sendState(true, who);   // make sure the client hears about it
@@ -1685,6 +1909,7 @@
             el('cheats').style.display = 'block';
             const wasLocked = !voiceUnlocked;
             unlockVoice(true);
+            if (wasLocked) { bump('voiceFound'); checkAwards(); }
             el('adminMsg').innerHTML = wasLocked
                 ? '<span style="color:var(--primary)">Commentator unlocked. Voice is on.</span>'
                 : 'Unlocked.';
@@ -1897,6 +2122,7 @@
         let savedSens = null;
         try { savedSens = localStorage.getItem('pong-sens'); } catch (e) {}
         setSensitivity(savedSens === null ? 1 : savedSens, false);
+        loadAwards();
         let savedDiff = 1, savedMode = 'classic';
         try {
             const dv = parseInt(localStorage.getItem('pong-diff'), 10);
