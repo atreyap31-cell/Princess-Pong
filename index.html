@@ -237,6 +237,26 @@
         .award .ad { font-size: 10.5px; color: #5d5d68; margin-top: 2px; line-height: 1.35; }
         .award.got .ad { color: #9a9aa4; }
         #awardCount { font-size: 12px; color: var(--primary); letter-spacing: 1px; }
+        .tabs { display: flex; gap: 6px; margin: 8px 0 2px; }
+        .tab {
+            min-height: 36px; padding: 7px 20px; font-size: 12px; border-radius: 8px;
+            border: 2px solid #33333d; color: #7d7d88; background: transparent;
+        }
+        .tab.on { border-color: var(--accent); color: var(--accent); }
+        #statsView {
+            width: min(520px, 92vw); max-height: 58vh; overflow-y: auto;
+            margin: 10px 0 4px; padding-right: 4px; text-align: left;
+        }
+        .sgroup { font-size: 10px; letter-spacing: 2px; color: #61616c; text-transform: uppercase;
+                  margin: 12px 0 4px; padding-left: 2px; }
+        .sgroup:first-child { margin-top: 0; }
+        .srow {
+            display: flex; justify-content: space-between; gap: 14px; align-items: baseline;
+            padding: 5px 10px; border-bottom: 1px solid #1f1f26; font-size: 12.5px; color: #9a9aa4;
+        }
+        .srow:last-child { border-bottom: none; }
+        .srow b { color: var(--primary); font-weight: 700; font-family: ui-monospace, monospace; }
+        .srow.hi b { color: var(--accent); }
         #saveCode {
             width: min(420px, 88vw); height: 54px; font-size: 11px; font-family: ui-monospace, monospace;
             background: #000; color: var(--primary); border: 1px solid #333; border-radius: 6px;
@@ -320,7 +340,8 @@
                     </div>
                     <div class="row" style="margin-top: 8px;">
                         <button type="button" class="subtle" onclick="openSettings()">Settings</button>
-                        <button type="button" class="subtle" onclick="openAwards()">Awards</button>
+                        <button type="button" class="subtle" onclick="openAwards('stats')">Stats</button>
+                        <button type="button" class="subtle" onclick="openAwards('awards')">Awards</button>
                     </div>
                     <div class="hint" id="controlsHint"></div>
                     <div id="rotate-hint">Turn your phone sideways for a bigger court</div>
@@ -328,8 +349,13 @@
             </div>
 
             <div id="awardsMenu" class="overlay" style="display: none;">
-                <h2 style="letter-spacing: 4px;">AWARDS</h2>
+                <h2 id="recordsTitle" style="letter-spacing: 4px;">RECORDS</h2>
                 <div id="awardCount">0 of 0</div>
+                <div class="tabs">
+                    <button type="button" class="tab" id="tabStats" onclick="showRecords('stats')">Stats</button>
+                    <button type="button" class="tab" id="tabAwards" onclick="showRecords('awards')">Awards</button>
+                </div>
+                <div id="statsView"></div>
                 <div id="awardGrid"></div>
                 <textarea id="saveCode" readonly aria-label="Backup code"></textarea>
                 <div class="row" style="margin-top: 10px;">
@@ -653,11 +679,81 @@
             checkAwards();
         }
 
-        function openAwards() {
-            el('menu').style.display = 'none';
+        function openAwards(tab) {
+            // clear whatever else is showing, or it sits on top of this one
+            document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
             el('awardsMenu').style.display = 'flex';
             el('saveCode').style.display = 'none';
             renderAwards();
+            showRecords(tab === 'stats' ? 'stats' : 'awards');
+        }
+
+        function showRecords(tab) {
+            const onStats = tab === 'stats';
+            el('statsView').style.display = onStats ? 'block' : 'none';
+            el('awardGrid').style.display = onStats ? 'none' : 'grid';
+            el('tabStats').classList.toggle('on', onStats);
+            el('tabAwards').classList.toggle('on', !onStats);
+            el('recordsTitle').textContent = onStats ? 'STATS' : 'AWARDS';
+            el('awardCount').style.display = onStats ? 'none' : 'block';
+            if (onStats) renderLifetime();
+        }
+
+        function renderLifetime() {
+            const st = awards.stats;
+            const clock = sec => Math.floor(sec / 60) + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
+            const rate = st.matches ? Math.round(st.wins / st.matches * 100) + '%' : '-';
+            const bestDiff = st.bestWinDiff >= 0 ? DIFFS[st.bestWinDiff].name : 'none yet';
+            const gotCount = AWARDS.filter(a => awards.got[a.id]).length;
+
+            const groups = [
+                ['Overall', [
+                    ['Matches played', st.matches],
+                    ['Won', st.wins],
+                    ['Lost', st.losses],
+                    ['Win rate', rate],
+                    ['Points scored', st.totalPoints],
+                    ['Days played', (st.days || []).length]
+                ]],
+                ['Personal bests', [
+                    ['Longest rally', st.bestRally + (st.bestRally === 1 ? ' hit' : ' hits'), 1],
+                    ['Top ball speed', st.topMph + ' mph', 1],
+                    ['Best crowd rating', st.bestCrowd + '/100', 1],
+                    ['Longest win streak', st.bestWinStreak, 1],
+                    ['Most points unanswered', st.bestPointRun, 1],
+                    ['Longest match', clock(st.longestMatch), 1],
+                    ['Hardest bot beaten', bestDiff, 1]
+                ]],
+                ['Notable wins', [
+                    ['Without conceding', st.shutouts],
+                    ['From behind', st.comebackWins],
+                    ['By a single point', st.nailBiters],
+                    ['After 9-9', st.deuceWins],
+                    ['With a god mode', st.godWins],
+                    ['With chaos on', st.chaosWins]
+                ]],
+                ['By mode', [
+                    ['Two-player matches', st.local2p],
+                    ['Online matches', st.online],
+                    ['Online wins', st.onlineWins],
+                    ['Hosted', st.onlineHosted],
+                    ['Joined', st.onlineJoined],
+                    ['Timed wins', st.timedWins]
+                ]],
+                ['Odds and ends', [
+                    ['Edge returns', st.edges],
+                    ['Power-ups collected', st.powerups],
+                    ['Lost without scoring', st.whitewashed],
+                    ['Current win streak', st.winStreak],
+                    ['Awards unlocked', gotCount + ' of ' + AWARDS.length, 1]
+                ]]
+            ];
+
+            el('statsView').innerHTML = groups.map(([title, rows]) =>
+                '<div class="sgroup">' + title + '</div>' +
+                rows.map(r => '<div class="srow' + (r[2] ? ' hi' : '') + '"><span>' + r[0] +
+                              '</span><b>' + r[1] + '</b></div>').join('')
+            ).join('');
         }
         function closeAwards() {
             el('awardsMenu').style.display = 'none';
@@ -1179,8 +1275,7 @@
         let settingsReturn = 'menu';
         function openSettings(from) {
             settingsReturn = from === 'pause' ? 'pause' : 'menu';
-            el('menu').style.display = 'none';
-            el('pauseMenu').style.display = 'none';
+            document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
             el('settingsMenu').style.display = 'flex';
         }
         function closeSettings() {

@@ -112,6 +112,14 @@ keeps your takes in local storage, so you can stop and come back.
 - **Export** produces a single `.zip` - the only file you ever download.
 - Partial sets are fine. Lines you skip just stay as on-screen text in the game.
 
+## Stats and awards
+
+**Stats** keeps a lifetime record: matches, wins, losses and win rate, points
+scored, days played, then personal bests - longest rally, top speed, best crowd
+rating, longest win streak, longest match, hardest bot beaten - followed by
+notable wins, a breakdown by mode, and odds and ends like edge returns and
+power-ups collected.
+
 ## Awards
 
 51 awards, from playing your first match to beating Insane without conceding a
