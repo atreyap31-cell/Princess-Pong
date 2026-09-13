@@ -247,6 +247,7 @@
                     <button type="button" id="hostBtn" onclick="startMultiplayer(true)">Host Game</button>
                     <div class="row">
                         <input type="text" id="joinId" placeholder="CODE" inputmode="numeric" autocomplete="off"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault();startMultiplayer(false);}"
                                maxlength="4" style="width: 110px;">
                         <button type="button" id="joinBtn" onclick="startMultiplayer(false)">Join</button>
                     </div>
@@ -724,6 +725,7 @@
         /* Online only: a 3-2-1 before play begins and after every unpause, so
            nobody comes back to a ball already in flight. */
         let countdown = 0, lastCountShown = 0, goFlashUntil = 0;
+        let serveDelay = 0;      // ticks the ball waits after a point, so you can reset
         const startCountdown = sec => { countdown = sec; };
 
         const keys = {};
@@ -741,6 +743,10 @@
         /* ---------- Keyboard ---------- */
         window.addEventListener("keydown", e => {
             if (e.code === "Escape") { e.preventDefault(); togglePause(); }
+            // Enter or space on the win screen plays again, instead of reaching for the mouse
+            if (matchOver && (e.code === 'Enter' || e.code === 'Space') && !(online && !isHost)) {
+                e.preventDefault(); restartMatch(); return;
+            }
             keys[e.code] = true;
             if (keys['KeyW'] && keys['KeyP'] && !online) openAdmin();
             if (e.shiftKey && e.code === "Digit1") toggleStealth(1);
@@ -805,6 +811,11 @@
         ['pointerdown', 'keydown'].forEach(ev =>
             window.addEventListener(ev, unlockAudio, { passive: true }));
         el('pauseTab').addEventListener('click', togglePause);
+        /* Local games only: auto-pausing an online match would stall the other
+           player, and pausing there is the host's call. */
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && gameActive && !paused && !matchOver && !online) togglePause();
+        });
         document.addEventListener('click', e => {
             const b = e.target.closest('.diff-btn');
             if (b) setDiff(+b.dataset.d);
@@ -818,6 +829,7 @@
         function showMultiMenu() {
             el('menu').style.display = 'none';
             el('multiMenu').style.display = 'flex';
+            setTimeout(() => { try { el('joinId').focus(); } catch (e) {} }, 50);
             const off = navigator.onLine === false;
             el('statusMsg').innerText = off
                 ? 'You are offline. Online play needs a connection - everything else works without one.'
@@ -853,12 +865,16 @@
             if (persist) { try { localStorage.setItem('pong-sens', sensitivity); } catch (e) {} }
         }
 
-        function setDiff(d) {
+        function setDiff(d, persist = true) {
             difficulty = d;
             document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('selected', +b.dataset.d === d));
+            if (persist) { try { localStorage.setItem('pong-diff', d); } catch (e) {} }
         }
-        function setGameMode(t) {
+        /* persist=false for the online client, which follows the host's mode and
+           should not have its own preference overwritten by it. */
+        function setGameMode(t, persist = true) {
             gameModeType = t;
+            if (persist) { try { localStorage.setItem('pong-mode', t); } catch (e) {} }
             el('modeClassic').classList.toggle('active-btn', t === 'classic');
             el('modeTimed').classList.toggle('active-btn', t === 'timed');
             el('timer-display').style.display = (t === 'timed' ? 'block' : 'none');
@@ -930,6 +946,7 @@
             speedPop = null;
             clearCommentary();
             resetBall(Math.random() < 0.5 ? 1 : -1);
+            serveDelay = 45;
             if (online) startCountdown(3);
             if (paused) togglePause();
             updateHUD();
@@ -1041,7 +1058,9 @@
             p1.h = p2.h = PADDLE_H; p1.score = p2.score = 0;
             el('owenBtn').classList.remove('active'); el('michaelBtn').classList.remove('active');
             toggleStealth(1); toggleStealth(1); // resync the labels without flipping state
-            setGameMode('classic');
+            let pref = 'classic';
+            try { pref = localStorage.getItem('pong-mode') || 'classic'; } catch (e) {}
+            setGameMode(pref, false);
             document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
             el('menu').style.display = 'flex';
             el('ui-header').style.visibility = 'hidden';
@@ -1146,6 +1165,17 @@
                 return;
             }
 
+            // A breath between points instead of serving into you instantly.
+            if (serveDelay > 0) {
+                serveDelay--;
+                [p1, p2].forEach(p => {
+                    if (p.y < 0) p.y = 0;
+                    if (p.y > H - p.h) p.y = H - p.h;
+                });
+                sendState(false, null);
+                return;
+            }
+
             // --- Ball ---
             let nX = ball.x + ball.dx, nY = ball.y + ball.dy;
 
@@ -1186,10 +1216,10 @@
 
             if (ball.x < 0) {
                 const md = missDistance(p1, ball.y), ws = p2.score, wo = p1.score;
-                p2.score++; onGoal(p2, p1, md, ws, wo); resetBall(1); checkWin();
+                p2.score++; onGoal(p2, p1, md, ws, wo); resetBall(1); serveDelay = 45; checkWin();
             } else if (ball.x > W) {
                 const md = missDistance(p2, ball.y), ws = p1.score, wo = p2.score;
-                p1.score++; onGoal(p1, p2, md, ws, wo); resetBall(-1); checkWin();
+                p1.score++; onGoal(p1, p2, md, ws, wo); resetBall(-1); serveDelay = 45; checkWin();
             }
             if (matchOver) return;
 
@@ -1365,7 +1395,7 @@
             ball.x = d.bx; ball.y = d.by; ball.speed = d.bs;
             p1.y = d.p1y; p1.h = d.p1h; p2.h = d.p2h;
             p1.score = d.s1; p2.score = d.s2; timeLeft = d.time;
-            if (d.gm !== gameModeType) setGameMode(d.gm);
+            if (d.gm !== gameModeType) setGameMode(d.gm, false);
             if (d.cs !== undefined && d.cs !== lastCmtSeq) {
                 lastCmtSeq = d.cs;
                 if (d.ct) {
@@ -1574,8 +1604,22 @@
             ctx.fillStyle = "#fff";
             ctx.beginPath(); ctx.arc(ball.x, ball.y, B_RAD, 0, Math.PI * 2); ctx.fill();
 
-            if (gameActive) { drawSpeedBar(); drawSpeedPop(); }
+            if (gameActive) { drawSpeedBar(); drawSpeedPop(); drawYouMarker(); }
             drawCountdown();
+        }
+
+        /* Online, nothing else tells you which paddle you are driving. */
+        function drawYouMarker() {
+            if (!online) return;
+            const me = isHost ? p1 : p2;
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            ctx.fillStyle = me.color;
+            ctx.font = "bold 13px 'Segoe UI', sans-serif";
+            ctx.textBaseline = 'top';
+            ctx.textAlign = isHost ? 'left' : 'right';
+            ctx.fillText('YOU', isHost ? me.x : me.x + P_WIDTH, 12);
+            ctx.restore();
         }
 
         /* 3 - 2 - 1 - GO, with a beep as each number lands. */
@@ -1687,8 +1731,14 @@
         let savedSens = null;
         try { savedSens = localStorage.getItem('pong-sens'); } catch (e) {}
         setSensitivity(savedSens === null ? 1 : savedSens, false);
-        setDiff(1);
-        setGameMode('classic');
+        let savedDiff = 1, savedMode = 'classic';
+        try {
+            const dv = parseInt(localStorage.getItem('pong-diff'), 10);
+            if (Number.isFinite(dv) && dv >= 0 && dv < DIFFS.length) savedDiff = dv;
+            savedMode = localStorage.getItem('pong-mode') === 'timed' ? 'timed' : 'classic';
+        } catch (e) {}
+        setDiff(savedDiff, false);
+        setGameMode(savedMode, false);
         updateHUD();
         document.body.classList.toggle('touch', isTouch);
         el('controlsHint').innerHTML = isTouch

@@ -23,7 +23,11 @@ Pong for a princess and a senior citizen.
 In 1-player and online games either set of keys moves your own paddle, and you can
 drag anywhere on the court.
 
-- **Pause:** `Esc`, or the `||` button on the court.
+- **Pause:** `Esc`, or the `||` button on the court. A local game pauses itself if
+  you switch tabs.
+- **Win screen:** `Enter` or `Space` plays again.
+- Difficulty and game mode are remembered between visits, and there is a short
+  breather after each point rather than an instant serve.
 - **Sensitivity:** slider on the main menu and in the pause menu (0.4x–2.5x). Affects
   both drag and keyboard, and is remembered between visits.
 
