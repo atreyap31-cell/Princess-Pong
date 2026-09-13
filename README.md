@@ -114,9 +114,10 @@ keeps your takes in local storage, so you can stop and come back.
 
 ## Awards
 
-26 awards, from playing your first match to beating Insane without conceding a
-point, surviving a 100-hit rally, or finishing a match the crowd rates 90 out of
-100. They unlock as you play, with a note at the bottom of the screen, and the
+51 awards, from playing your first match to beating Insane without conceding a
+point, surviving a 100-hit rally, winning ten in a row, landing 25 edge returns,
+taking a match that went to 9-9, or finishing one the crowd rates 90 out of 100.
+A few are for the other direction - losing ten, or losing without scoring. They unlock as you play, with a note at the bottom of the screen, and the
 Awards screen shows what is left to find.
 
 They are saved in your browser, which means per browser and per device: they do

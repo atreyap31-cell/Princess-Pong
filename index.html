@@ -514,12 +514,40 @@
             { id:'chaos10',     m:'🎁', n:'Chaos Agent',    d:'Collect 10 power-ups',               t:s=>s.powerups>=10 },
             { id:'godmode',     m:'😇', n:'Hardly Sporting',d:'Win with a god mode switched on',    t:s=>s.godWins>=1 },
             { id:'voice',       m:'🎙️', n:'The Commentator',d:'Unlock the recorded commentary',    t:s=>s.voiceFound>=1 },
-            { id:'allnighter',  m:'🌙', n:'Night Owl',      d:'Play a match between 1am and 5am',   t:s=>s.nightOwl>=1 }
+            { id:'allnighter',  m:'🌙', n:'Night Owl',      d:'Play a match between 1am and 5am',   t:s=>s.nightOwl>=1 },
+            { id:'earlybird',   m:'🌅', n:'Early Bird',      d:'Play a match between 5am and 8am',   t:s=>s.earlyBird>=1 },
+            { id:'centurion',   m:'💯', n:'Centurion',       d:'Play 100 matches',                   t:s=>s.matches>=100 },
+            { id:'legend',      m:'🦁', n:'Legend',          d:'Win 50 matches',                     t:s=>s.wins>=50 },
+            { id:'points250',   m:'🔢', n:'Tally',           d:'Score 250 points in total',          t:s=>s.totalPoints>=250 },
+            { id:'points1000',  m:'📈', n:'Four Figures',    d:'Score 1000 points in total',         t:s=>s.totalPoints>=1000 },
+            { id:'hattrick',    m:'🎩', n:'Hat Trick',       d:'Win three matches in a row',         t:s=>s.bestWinStreak>=3 },
+            { id:'streak10',    m:'🚀', n:'Unstoppable',     d:'Win ten matches in a row',           t:s=>s.bestWinStreak>=10 },
+            { id:'run5',        m:'🌊', n:'On a Run',        d:'Score five points unanswered',       t:s=>s.bestPointRun>=5 },
+            { id:'edge1',       m:'📐', n:'Off the Edge',    d:'Return one off the paddle tip',      t:s=>s.edges>=1 },
+            { id:'edge25',      m:'🔪', n:'Sharpshooter',    d:'Land 25 edge returns',               t:s=>s.edges>=25 },
+            { id:'deuce',       m:'⚖️', n:'Deuce',           d:'Win a match that reached 9-9',       t:s=>s.deuceWins>=1 },
+            { id:'marathon',    m:'⏳', n:'Marathon',        d:'Play a match lasting 10 minutes',    t:s=>s.longestMatch>=600 },
+            { id:'maxed',       m:'🧨', n:'Maxed Out',       d:'Reach the top speed of 112 mph',     t:s=>s.topMph>=112 },
+            { id:'timed_win',   m:'⏱️', n:'Beat the Clock',  d:'Win a timed match',                  t:s=>s.timedWins>=1 },
+            { id:'timed10',     m:'🕰️', n:'Time Lord',       d:'Win ten timed matches',              t:s=>s.timedWins>=10 },
+            { id:'host',        m:'📶', n:'Host With the Most', d:'Host a match online',             t:s=>s.onlineHosted>=1 },
+            { id:'joiner',      m:'🧳', n:'Away Days',       d:'Join someone else\u2019s match',        t:s=>s.onlineJoined>=1 },
+            { id:'online10',    m:'🛰️', n:'Rivalry',         d:'Play ten matches online',            t:s=>s.online>=10 },
+            { id:'couch10',     m:'🛋️', n:'Couch Co-op',     d:'Play ten two-player matches',        t:s=>s.local2p>=10 },
+            { id:'gift50',      m:'🎉', n:'Gift Horse',      d:'Collect 50 power-ups',               t:s=>s.powerups>=50 },
+            { id:'chaos_win',   m:'🌪️', n:'Chaos Champion',  d:'Win with chaos mode on',             t:s=>s.chaosWins>=1 },
+            { id:'both_gods',   m:'👼', n:'Both Gods',       d:'Win with Owen and Michael both on',  t:s=>s.bothGodWins>=1 },
+            { id:'humbled',     m:'🙃', n:'Humbled',         d:'Lose ten matches',                   t:s=>s.losses>=10 },
+            { id:'whitewash',   m:'🧻', n:'Whitewashed',     d:'Lose a match without scoring',       t:s=>s.whitewashed>=1 },
+            { id:'days5',       m:'📅', n:'Regular Fixture', d:'Play on five different days',        t:s=>(s.days||[]).length>=5 }
         ];
 
         const BLANK_STATS = { matches:0, wins:0, shutouts:0, comebackWins:0, nailBiters:0,
             bestWinDiff:-1, insaneShutout:0, bestRally:0, topMph:0, bestCrowd:0,
-            local2p:0, online:0, onlineWins:0, powerups:0, godWins:0, voiceFound:0, nightOwl:0 };
+            local2p:0, online:0, onlineWins:0, powerups:0, godWins:0, voiceFound:0, nightOwl:0,
+            losses:0, totalPoints:0, winStreak:0, bestWinStreak:0, bestPointRun:0,
+            edges:0, deuceWins:0, longestMatch:0, timedWins:0, onlineHosted:0, onlineJoined:0,
+            chaosWins:0, bothGodWins:0, whitewashed:0, earlyBird:0, days:[] };
 
         let awards = { got: {}, stats: Object.assign({}, BLANK_STATS) };
 
@@ -588,9 +616,26 @@
             best('topMph', mph(stats.speed));
             best('bestCrowd', excitement());
             bump('powerups', stats.powers);
+            bump('totalPoints', mine);
+            bump('edges', stats.edges);
+            best('bestPointRun', stats.bestStreak);
+            best('longestMatch', Math.round(stats.ticks / 60));
+            if (hr >= 5 && hr < 8) bump('earlyBird');
+            if (online) bump(isHost ? 'onlineHosted' : 'onlineJoined');
+
+            // one entry per calendar day played
+            const day = new Date().toISOString().slice(0, 10);
+            if (!Array.isArray(st.days)) st.days = [];
+            if (!st.days.includes(day)) { st.days.push(day); if (st.days.length > 400) st.days.shift(); }
 
             if (iWon) {
                 bump('wins');
+                bump('winStreak');
+                best('bestWinStreak', st.winStreak);
+                if (gameModeType === 'timed') bump('timedWins');
+                if (chaosMode) bump('chaosWins');
+                if (owenMode && michaelMode) bump('bothGodWins');
+                if (stats.deuce) bump('deuceWins');
                 if (online) bump('onlineWins');
                 if (theirs === 0) bump('shutouts');
                 if (Math.abs(mine - theirs) === 1) bump('nailBiters');
@@ -600,6 +645,10 @@
                     best('bestWinDiff', difficulty);
                     if (difficulty === 3 && theirs === 0) bump('insaneShutout');
                 }
+            } else {
+                bump('losses');
+                st.winStreak = 0;
+                if (mine === 0) bump('whitewashed');
             }
             checkAwards();
         }
@@ -1005,7 +1054,8 @@
         let saidClutch = false, cmtSeq = 0, cmtText = '', lastCmtSeq = -1;
         let cmtUntil = 0, cmtPriority = -1, cmtLastPick = {};
         const stats = { rally: 0, speed: 0, lead: 0, leader: '', powers: 0, ticks: 0,
-                        nearMisses: 0, comebacks: 0, leadChanges: 0 };
+                        nearMisses: 0, comebacks: 0, leadChanges: 0,
+                        edges: 0, bestStreak: 0, deuce: 0 };
         let lastLeadSign = 0, uiScale = 1, calibrateTimer = null, cameFromSettings = false;
         let speedPop = null, popSeq = 0, popMph = 0, popSide = 'left', lastPopSeq = -1;
         /* Online only: a 3-2-1 before play begins and after every unpause, so
@@ -1304,6 +1354,7 @@
             rallyHits = 0; speedTier = 0; streak = 0; lastScorer = null; saidClutch = false;
             stats.rally = stats.speed = stats.lead = stats.powers = stats.ticks = 0; stats.leader = '';
             stats.nearMisses = stats.comebacks = stats.leadChanges = 0; lastLeadSign = 0;
+            stats.edges = stats.bestStreak = stats.deuce = 0;
             speedPop = null;
             clearCommentary();
             resetBall(Math.random() < 0.5 ? 1 : -1);
@@ -1567,7 +1618,7 @@
                 if (ball.speed > stats.speed) stats.speed = ball.speed;
                 if (rallyHits === 8 || rallyHits === 16 || rallyHits === 26) say('rally', 2);
                 else if (rallyHits === 40 || rallyHits === 60) say('stalemate', 3);
-                else if (Math.abs(angle) > 0.85) say('edge', 1);
+                else if (Math.abs(angle) > 0.85) { stats.edges++; say('edge', 1); }
                 const tier = ball.speed > 20 ? 2 : ball.speed > 13 ? 1 : 0;
                 if (tier > speedTier) { speedTier = tier; say('speed', 1); }
 
@@ -1705,6 +1756,8 @@
         function onGoal(scorer, opp, missDist, wasScorer, wasOpp) {
             streak = (lastScorer === scorer) ? streak + 1 : 1;
             lastScorer = scorer;
+            if (streak > stats.bestStreak) stats.bestStreak = streak;
+            if (p1.score >= WIN_SCORE - 1 && p2.score >= WIN_SCORE - 1) stats.deuce = 1;
             rallyHits = 0; speedTier = 0;
             play('score');
             buzz(28);
