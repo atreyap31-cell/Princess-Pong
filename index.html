@@ -118,7 +118,12 @@
         .overlay {
             position: absolute; inset: 0; z-index: 20;
             background: rgba(10, 10, 15, 0.96); backdrop-filter: blur(12px);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            display: flex; flex-direction: column; align-items: center;
+            /* Plain `center` pushes overflow above the scroll origin, where it can
+               never be reached. `safe center` falls back to start when it would
+               not fit, so nothing is stranded off the top of a short screen. */
+            justify-content: center;
+            justify-content: safe center;
             text-align: center; border-radius: 8px;
             padding: 12px; overflow-y: auto; -webkit-overflow-scrolling: touch;
         }
@@ -201,6 +206,35 @@
 
         #rotate-hint { display: none; font-size: 11px; color: var(--accent); margin-top: 10px; }
 
+        /* Short viewports: shrink the headline furniture so the menu still fits
+           without scrolling. */
+        @media (max-height: 620px) {
+            .overlay h1 { font-size: clamp(20px, 5.4vh, 40px); letter-spacing: 4px; }
+            .overlay .tagline { margin-bottom: 6px; font-size: 11px; }
+            .overlay h3 { margin: 5px 0 2px; }
+            .btn-group { gap: 5px; }
+            button { min-height: 40px; padding: 7px 14px; font-size: 12px; }
+            .hint { margin-top: 6px; }
+        }
+
+        /* Very short viewports - a phone held sideways. Tap targets drop below
+           the usual 44px, which is the right trade at 390px of total height. */
+        @media (max-height: 470px) {
+            .overlay { padding: 8px; }
+            .overlay h1 { font-size: clamp(17px, 6vh, 30px); letter-spacing: 3px; }
+            .overlay h2 { font-size: clamp(15px, 5vh, 24px); margin: 2px 0; }
+            .overlay h3 { margin: 3px 0 1px; font-size: 9px; }
+            .overlay .tagline { display: none; }
+            .btn-group { gap: 4px; }
+            .row { gap: 6px; }
+            button { min-height: 36px; padding: 5px 12px; font-size: 11px; }
+            input { min-height: 36px; font-size: 16px; }
+            .hint { font-size: 10px; margin-top: 4px; line-height: 1.35; }
+            #controlsHint, #rotate-hint { display: none; }
+            #statsBox { font-size: 11px; }
+            .stat-row { padding: 3px 8px; }
+        }
+
         /* On a portrait phone the court is short, so a menu confined to it would
            be a cramped scrolling box. Give the overlays the whole viewport. */
         @media (orientation: portrait) and (max-width: 820px) {
@@ -238,6 +272,22 @@
                             <button type="button" class="diff-btn" data-d="3">Insane</button>
                         </div>
                     </div>
+                    <div class="row" style="margin-top: 10px;">
+                        <button type="button" onclick="init(1)">1 Player</button>
+                        <button type="button" onclick="init(2)">2 Players</button>
+                        <button type="button" class="accent" onclick="showMultiMenu()">Online</button>
+                    </div>
+                    <div class="row" style="margin-top: 8px;">
+                        <button type="button" class="subtle" onclick="openSettings()">Settings</button>
+                    </div>
+                    <div class="hint" id="controlsHint"></div>
+                    <div id="rotate-hint">Turn your phone sideways for a bigger court</div>
+                </div>
+            </div>
+
+            <div id="settingsMenu" class="overlay" style="display: none;">
+                <h2 style="letter-spacing: 4px;">SETTINGS</h2>
+                <div class="btn-group">
                     <h3>Sensitivity</h3>
                     <div class="row sens-row">
                         <input type="range" class="sens-slider" min="0.4" max="2.5" step="0.1" value="1"
@@ -256,13 +306,7 @@
                         <button type="button" class="voice-btn toggle" onclick="toggleVoice()">Voice: ON</button>
                         <button type="button" class="pw-btn subtle" onclick="openPw()" title="Something is locked in here">PW</button>
                     </div>
-                    <div class="row" style="margin-top: 8px;">
-                        <button type="button" onclick="init(1)">1 Player</button>
-                        <button type="button" onclick="init(2)">2 Players</button>
-                        <button type="button" class="accent" onclick="showMultiMenu()">Online</button>
-                    </div>
-                    <div class="hint" id="controlsHint"></div>
-                    <div id="rotate-hint">Turn your phone sideways for a bigger court</div>
+                    <button type="button" class="subtle" style="margin-top: 16px;" onclick="closeSettings()">Back</button>
                 </div>
             </div>
 
@@ -309,24 +353,10 @@
                             <button type="button" id="michaelBtn" class="btn-michael" onclick="toggleMichael()">Michael</button>
                         </div>
                     </div>
-                    <h3>Sensitivity</h3>
-                    <div class="row sens-row">
-                        <input type="range" class="sens-slider" min="0.4" max="2.5" step="0.1" value="1"
-                               aria-label="Control sensitivity">
-                        <span class="sens-val">1.0x</span>
-                    </div>
-                    <h3>Screen Size</h3>
-                    <div class="row sens-row">
-                        <input type="range" class="scale-slider" min="0.5" max="1.25" step="0.01" value="1"
-                               aria-label="Screen size">
-                        <span class="scale-val">100%</span>
-                    </div>
-                    <div class="hint" style="margin-top: 2px;">Drag until the dashed frame meets your screen edges.</div>
                     <h3>Extra</h3>
                     <div class="row">
                         <button type="button" id="chaosBtn" class="toggle" onclick="toggleChaos()">Chaos Mode: OFF</button>
-                        <button type="button" class="sound-btn toggle" onclick="toggleSound()">Sound: ON</button>
-                        <button type="button" class="voice-btn toggle" onclick="toggleVoice()">Voice: ON</button>
+                        <button type="button" class="subtle" onclick="openSettings('pause')">Settings</button>
                     </div>
                     <button type="button" class="subtle" style="margin-top: 14px;" onclick="returnToMenu()">Quit</button>
                 </div>
@@ -754,7 +784,7 @@
         let cmtUntil = 0, cmtPriority = -1, cmtLastPick = {};
         const stats = { rally: 0, speed: 0, lead: 0, leader: '', powers: 0, ticks: 0,
                         nearMisses: 0, comebacks: 0, leadChanges: 0 };
-        let lastLeadSign = 0, uiScale = 1, calibrateTimer = null;
+        let lastLeadSign = 0, uiScale = 1, calibrateTimer = null, cameFromSettings = false;
         let speedPop = null, popSeq = 0, popMph = 0, popSide = 'left', lastPopSeq = -1;
         /* Online only: a 3-2-1 before play begins and after every unpause, so
            nobody comes back to a ball already in flight. */
@@ -776,7 +806,11 @@
 
         /* ---------- Keyboard ---------- */
         window.addEventListener("keydown", e => {
-            if (e.code === "Escape") { e.preventDefault(); togglePause(); }
+            if (e.code === "Escape") {
+                e.preventDefault();
+                if (el('settingsMenu').style.display === 'flex') { closeSettings(); return; }
+                togglePause();
+            }
             // Enter or space on the win screen plays again, instead of reaching for the mouse
             if (matchOver && (e.code === 'Enter' || e.code === 'Space') && !(online && !isHost)) {
                 e.preventDefault(); restartMatch(); return;
@@ -869,6 +903,18 @@
         });
 
         /* ---------- Menus & toggles ---------- */
+        let settingsReturn = 'menu';
+        function openSettings(from) {
+            settingsReturn = from === 'pause' ? 'pause' : 'menu';
+            el('menu').style.display = 'none';
+            el('pauseMenu').style.display = 'none';
+            el('settingsMenu').style.display = 'flex';
+        }
+        function closeSettings() {
+            el('settingsMenu').style.display = 'none';
+            el(settingsReturn === 'pause' ? 'pauseMenu' : 'menu').style.display = 'flex';
+        }
+
         function showMultiMenu() {
             el('menu').style.display = 'none';
             el('multiMenu').style.display = 'flex';
@@ -1628,7 +1674,8 @@
         function closeAdmin() {
             el('secretWindow').style.display = 'none';
             if (gameActive) { paused = false; }
-            else { el('menu').style.display = 'flex'; }   // opened from the menu
+            else if (cameFromSettings) { cameFromSettings = false; openSettings(); }
+            else { el('menu').style.display = 'flex'; }
         }
         function checkAdmin() {
             if (el('adminPass').value !== "dieh0neydie") {
@@ -1644,6 +1691,7 @@
         }
 
         function openPw() {
+            cameFromSettings = el('settingsMenu').style.display === 'flex';
             document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
             el('secretWindow').style.display = 'flex';
             el('adminMsg').innerText = '';
