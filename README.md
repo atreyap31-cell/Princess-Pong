@@ -17,7 +17,7 @@ Pong for a princess and a senior citizen.
 |            | Player 1        | Player 2        |
 | ---------- | --------------- | --------------- |
 | Keyboard   | `W` / `S`       | `↑` / `↓`       |
-| Touch      | drag the left half of the court | drag the right half |
+| Touch      | drag your half of the court | drag your half |
 | Mouse      | click and drag  | click and drag  |
 
 In 1-player and online games either set of keys moves your own paddle, and you can
@@ -71,6 +71,18 @@ A minimal bar along the bottom of the court tracks the live ball speed, with an
 mph readout beside it (a serve is about 21 mph, a maxed-out smash about 112). On
 every point a small pill pops up off to the side showing how fast the ball was
 travelling when it went in.
+
+## On a phone
+
+The court turns to fit the screen. Held upright it rotates so the long axis runs
+top to bottom, roughly doubling the playing area, with your paddle nearest you
+and the opponent's at the far end - swipe left and right to move. Held sideways
+it plays flat and the scoreboard floats over the court instead of stacking above
+it, which buys back about a third of the height. It switches by itself, on
+whichever fit is larger, and follows you when you rotate the phone.
+
+Two people can share one phone upright: the bottom half of the screen drives P1,
+the top half drives P2, and two thumbs work at once.
 
 ## Screen size
 

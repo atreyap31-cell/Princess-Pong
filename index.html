@@ -40,22 +40,47 @@
         }
         #game-wrapper.calibrating::after { opacity: 1; }
 
-        /* Width is capped by the available HEIGHT too, so the court never overflows
-           a short/landscape phone screen. 1.6 = the 800x500 aspect ratio. */
+        /* Size is computed in layout(): it measures the real viewport and picks
+           whichever orientation gives the bigger court, rotating the canvas for
+           portrait. These are only the pre-script fallbacks. */
         #stage {
             position: relative;
-            width: min(96vw, 900px, calc((100vh - 150px) * 1.6));
-            width: calc(var(--court-w) * var(--ui-scale, 1));
-            aspect-ratio: 8 / 5;
+            width: min(96vw, 900px);
+            height: min(60vw, 562px);
+        }
+        #stage canvas {
+            position: absolute; left: 50%; top: 50%;
+            transform: translate(-50%, -50%);
+            transform-origin: center center;
+            -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
         }
 
         #ui-header {
             visibility: hidden;
-            width: min(96vw, 900px, calc((100vh - 150px) * 1.6));
-            width: calc(var(--court-w) * var(--ui-scale, 1));
+            width: min(96vw, 900px);
             display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
             font-size: calc(clamp(22px, 5vw, 46px) * var(--ui-scale, 1)); font-weight: 800;
         }
+        /* Portrait puts the court on its side, so P2 reads above it and P1 below. */
+        #ui-footer {
+            display: none; visibility: hidden;
+            width: min(96vw, 900px); justify-content: center;
+            font-size: calc(clamp(22px, 5vw, 46px) * var(--ui-scale, 1)); font-weight: 800;
+        }
+        #game-wrapper.rot #ui-footer { display: flex; }
+        /* On a short screen (a phone held sideways) stacking the scoreboard above
+           the court costs a third of the height. Float it over the court instead. */
+        #game-wrapper.compact #ui-header {
+            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            z-index: 6; pointer-events: none; padding: 2px 52px;   /* clears the pause button, symmetrically */
+            font-size: calc(clamp(15px, 3.6vh, 30px) * var(--ui-scale, 1));
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+        }
+        #game-wrapper.compact #commentary { min-height: 1.5em; font-size: calc(clamp(10px, 2.1vh, 15px) * var(--ui-scale, 1)); }
+
+        /* hidden, not removed, so the commentary stays centred in the row */
+        #game-wrapper.rot #p1Score  { visibility: hidden; }
+        #game-wrapper.rot #pauseTab { opacity: 0.55; }
         #p1Score, #p2Score { flex: 0 0 auto; min-width: 1.5em; text-align: center; }
         #centre-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 
@@ -342,6 +367,9 @@
                 </div>
             </div>
         </div>
+        <div id="ui-footer">
+            <div id="p1ScoreB" style="color: var(--primary)">0</div>
+        </div>
     </div>
 
     <script>
@@ -414,6 +442,12 @@
 
         let sfxSeq = 0, sfxName = '', lastSfxSeq = -1;
         let cmtId = '';
+        /* Phones only; follows the sound toggle so it can be turned off. */
+        function buzz(pattern) {
+            if (!soundOn || !navigator.vibrate) return;
+            try { navigator.vibrate(pattern); } catch (e) {}
+        }
+
         function play(name) {
             if (online && !isHost) return;   // the client's sounds arrive mirrored from the host
             if (SFX[name]) SFX[name]();
@@ -762,9 +796,18 @@
            P1, right half drives P2. Mouse drag works the same way on desktop. */
         const pointers = new Map();
 
-        function paddleForPointer(clientX, rect) {
+        /* Which way a drag runs, and which half of the screen owns which paddle,
+           both depend on whether the court is turned on its side. */
+        const dragCoord = e => rotatedView ? e.clientX : e.clientY;
+        const dragSpan = rect => rotatedView ? rect.width : rect.height;
+
+        function paddleForPointer(e, rect) {
             if (online) return myPaddle();
-            if (isLocal2P()) return (clientX - rect.left) < rect.width / 2 ? p1 : p2;
+            if (isLocal2P()) {
+                return rotatedView
+                    ? ((e.clientY - rect.top) > rect.height / 2 ? p1 : p2)   // P1 is nearest you
+                    : ((e.clientX - rect.left) < rect.width / 2 ? p1 : p2);
+            }
             return p1;
         }
         /* Relative drag, scaled by sensitivity. Absolute finger->paddle mapping
@@ -776,11 +819,11 @@
             const rec = pointers.get(e.pointerId);
             if (!rec) return;
             const rect = canvas.getBoundingClientRect();
-            const dy = ((e.clientY - rec.startY) / rect.height) * H;
+            const dy = ((dragCoord(e) - rec.startC) / dragSpan(rect)) * H;
             let target = rec.startPaddleY + dy * sensitivity;
             const maxY = H - rec.p.h;
-            if (target < 0)         { target = 0;    rec.startY = e.clientY; rec.startPaddleY = 0; }
-            else if (target > maxY) { target = maxY; rec.startY = e.clientY; rec.startPaddleY = maxY; }
+            if (target < 0)         { target = 0;    rec.startC = dragCoord(e); rec.startPaddleY = 0; }
+            else if (target > maxY) { target = maxY; rec.startC = dragCoord(e); rec.startPaddleY = maxY; }
             rec.p.y = target;
             rec.p.vy = 0;
             e.preventDefault();
@@ -788,9 +831,9 @@
         canvas.addEventListener('pointerdown', e => {
             if (!gameActive || paused) return;
             if (e.pointerType === 'mouse' && e.buttons !== 1) return;
-            const p = paddleForPointer(e.clientX, canvas.getBoundingClientRect());
+            const p = paddleForPointer(e, canvas.getBoundingClientRect());
             if (online && !isHost && p !== p2) return;
-            pointers.set(e.pointerId, { p, startY: e.clientY, startPaddleY: p.y });
+            pointers.set(e.pointerId, { p, startC: dragCoord(e), startPaddleY: p.y });
             try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
             e.preventDefault();
         });
@@ -839,6 +882,53 @@
         window.addEventListener('online',  () => { if (el('multiMenu').style.display === 'flex') showMultiMenu(); });
         window.addEventListener('offline', () => { if (el('multiMenu').style.display === 'flex') showMultiMenu(); });
 
+        /* Picks whichever orientation fits the bigger court and sizes everything
+           from the real viewport, instead of guessing a fixed chrome height. On a
+           portrait phone that means turning the court on its side, which roughly
+           doubles it. */
+        let rotatedView = false;
+
+        function layout() {
+            const stage = el('stage'), header = el('ui-header'), footer = el('ui-footer');
+            const wrap = el('game-wrapper');
+
+            // Decided on height alone, so it cannot feed back into the rotation choice.
+            const compact = window.innerHeight < 500;
+            wrap.classList.toggle('compact', compact);
+
+            const chrome = compact ? 16 : (header.offsetHeight || 60) + 54;
+            const availW = Math.max(220, window.innerWidth - 12);
+            const availH = Math.max(180, window.innerHeight - chrome);
+            const AR = W / H;
+
+            const lenFlat = Math.min(availW, availH * AR);
+            const lenTurn = Math.min(availH, availW * AR);
+            // 6% margin stops it flip-flopping when the two fits are near-equal
+            rotatedView = lenTurn > lenFlat * 1.06;
+
+            let len = (rotatedView ? lenTurn : lenFlat) * uiScale;
+            len = Math.max(200, Math.min(len, 1500));
+            const wid = len / AR;
+
+            canvas.style.width = len + 'px';
+            canvas.style.height = wid + 'px';
+            canvas.style.transform = rotatedView
+                ? 'translate(-50%, -50%) rotate(-90deg)'
+                : 'translate(-50%, -50%)';
+
+            const sw = (rotatedView ? wid : len), sh = (rotatedView ? len : wid);
+            stage.style.width = sw + 'px';
+            stage.style.height = sh + 'px';
+            header.style.width = sw + 'px';
+            footer.style.width = sw + 'px';
+            wrap.classList.toggle('rot', rotatedView);
+        }
+
+        let layoutTimer = null;
+        function relayout() { clearTimeout(layoutTimer); layoutTimer = setTimeout(layout, 60); }
+        window.addEventListener('resize', relayout);
+        window.addEventListener('orientationchange', relayout);
+
         function setUiScale(v, persist = true, showFrame = true) {
             const n = parseFloat(v);
             uiScale = Math.min(1.25, Math.max(0.5, Number.isFinite(n) ? n : 1));
@@ -848,6 +938,7 @@
             });
             document.querySelectorAll('.scale-val').forEach(e => e.textContent = Math.round(uiScale * 100) + '%');
             if (persist) { try { localStorage.setItem('pong-scale', uiScale); } catch (e) {} }
+            layout();
             if (showFrame) {
                 el('game-wrapper').classList.add('calibrating');
                 clearTimeout(calibrateTimer);
@@ -924,6 +1015,7 @@
             mode = m; online = on; matchOver = false;
             document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
             el('ui-header').style.visibility = 'visible';
+            el('ui-footer').style.visibility = 'visible';
             el('pauseTab').style.display = (online && !isHost) ? 'none' : 'block';
             refreshMenuVisibility();
             restartMatch();
@@ -966,6 +1058,7 @@
             el('winScreen').style.display = 'flex';
             cmtUntil = 0; cmtPriority = -1; say('win', 6);
             play('win');
+            buzz([50, 60, 50, 60, 110]);
             updateHUD();
             renderStats();
             if (online && isHost) sendState(true, who);   // make sure the client hears about it
@@ -1064,6 +1157,7 @@
             document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
             el('menu').style.display = 'flex';
             el('ui-header').style.visibility = 'hidden';
+            el('ui-footer').style.visibility = 'hidden';
             el('pauseTab').style.display = 'none';
             clearCommentary();
             el('cheats').style.display = 'none';
@@ -1343,6 +1437,7 @@
             lastScorer = scorer;
             rallyHits = 0; speedTier = 0;
             play('score');
+            buzz(28);
             popSpeed(mph(ball.speed), scorer === p1 ? 'right' : 'left');
             const gap = Math.abs(p1.score - p2.score);
             if (gap > stats.lead) { stats.lead = gap; stats.leader = p1.score > p2.score ? 'P1' : 'P2'; }
@@ -1362,6 +1457,7 @@
 
         function updateHUD() {
             el('p1Score').innerText = p1.score;
+            el('p1ScoreB').innerText = p1.score;
             el('p2Score').innerText = p2.score;
             const t = Math.max(0, timeLeft);
             const m = Math.floor(t / 60), s = Math.floor(t % 60);
@@ -1574,13 +1670,14 @@
 
             // Show which half drives which paddle when two people share one screen.
             if (isTouch && isLocal2P() && gameActive) {
-                ctx.save();
-                ctx.fillStyle = "rgba(255,255,255,0.18)";
-                ctx.font = "bold 20px 'Segoe UI', sans-serif";
-                ctx.textAlign = "center";
-                ctx.fillText("P1 SIDE", W * 0.25, H - 16);
-                ctx.fillText("P2 SIDE", W * 0.75, H - 16);
-                ctx.restore();
+                const label = (text, lx) => atLogical(lx, rotatedView ? H / 2 : H - 22, () => {
+                    ctx.fillStyle = "rgba(255,255,255,0.18)";
+                    ctx.font = "bold 20px 'Segoe UI', sans-serif";
+                    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                    ctx.fillText(text, 0, 0);
+                });
+                label("P1 SIDE", W * 0.25);
+                label("P2 SIDE", W * 0.75);
             }
 
             ball.trail.forEach((t, i) => {
@@ -1608,18 +1705,29 @@
             drawCountdown();
         }
 
+        /* Draw at a court position but keep the text the right way up, whichever
+           way the court is turned. */
+        function atLogical(lx, ly, fn) {
+            ctx.save();
+            ctx.translate(lx, ly);
+            if (rotatedView) ctx.rotate(Math.PI / 2);   // cancels the CSS -90deg
+            fn();
+            ctx.restore();
+        }
+
         /* Online, nothing else tells you which paddle you are driving. */
         function drawYouMarker() {
             if (!online) return;
             const me = isHost ? p1 : p2;
-            ctx.save();
-            ctx.globalAlpha = 0.45;
-            ctx.fillStyle = me.color;
-            ctx.font = "bold 13px 'Segoe UI', sans-serif";
-            ctx.textBaseline = 'top';
-            ctx.textAlign = isHost ? 'left' : 'right';
-            ctx.fillText('YOU', isHost ? me.x : me.x + P_WIDTH, 12);
-            ctx.restore();
+            const lx = isHost ? me.x + P_WIDTH + 8 : me.x - 8;
+            atLogical(lx, me.y + me.h / 2, () => {
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = me.color;
+                ctx.font = "bold 13px 'Segoe UI', sans-serif";
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = isHost ? 'left' : 'right';
+                ctx.fillText('YOU', 0, 0);
+            });
         }
 
         /* 3 - 2 - 1 - GO, with a beep as each number lands. */
@@ -1656,6 +1764,7 @@
             ctx.fillRect(0, 0, W, H);
             ctx.globalAlpha = alpha;
             ctx.translate(W / 2, H / 2);
+            if (rotatedView) ctx.rotate(Math.PI / 2);
             ctx.scale(scale, scale);
             ctx.fillStyle = colour;
             ctx.font = 'bold 130px ui-monospace, monospace';
@@ -1670,16 +1779,25 @@
             const frac = Math.min(1, ball.speed / MAX_SPEED);
             const hue = 180 - frac * 180;
             ctx.fillStyle = "rgba(255,255,255,0.05)";
-            ctx.fillRect(0, H - 3, W, 3);
-            ctx.fillStyle = `hsl(${hue}, 100%, 55%)`;
-            ctx.fillRect(0, H - 3, W * frac, 3);
+            ctx.fillStyle = "rgba(255,255,255,0.05)";
+            // Turned on its side, the court's bottom edge is a screen edge, so the
+            // bar is drawn down the logical left instead to stay under the play.
+            if (rotatedView) {
+                ctx.fillRect(0, 0, 3, H);
+                ctx.fillStyle = `hsl(${hue}, 100%, 55%)`;
+                ctx.fillRect(0, 0, 3, H * frac);
+            } else {
+                ctx.fillRect(0, H - 3, W, 3);
+                ctx.fillStyle = `hsl(${hue}, 100%, 55%)`;
+                ctx.fillRect(0, H - 3, W * frac, 3);
+            }
 
-            ctx.save();
-            ctx.font = "11px ui-monospace, monospace";
-            ctx.fillStyle = `hsla(${hue}, 100%, 70%, 0.45)`;
-            ctx.textAlign = "right";
-            ctx.fillText(mph(ball.speed) + " MPH", W - 8, H - 10);
-            ctx.restore();
+            atLogical(rotatedView ? 26 : W - 10, H - 14, () => {
+                ctx.font = "11px ui-monospace, monospace";
+                ctx.fillStyle = `hsla(${hue}, 100%, 70%, 0.45)`;
+                ctx.textAlign = "right"; ctx.textBaseline = "middle";
+                ctx.fillText(mph(ball.speed) + " MPH", 0, 0);
+            });
         }
 
         function pillPath(x, y, w, h, r) {
@@ -1701,16 +1819,16 @@
             const frac = Math.min(1, speedPop.mph / (MAX_SPEED * MPH_PER_UNIT));
             const hue = 180 - frac * 180;
 
-            ctx.save();
-            ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-            pillPath(x - 54, y - 17, 108, 32, 16);
-            ctx.fillStyle = "rgba(10, 10, 15, 0.88)"; ctx.fill();
-            ctx.strokeStyle = `hsl(${hue}, 100%, 55%)`; ctx.lineWidth = 1.5; ctx.stroke();
-            ctx.fillStyle = `hsl(${hue}, 100%, 68%)`;
-            ctx.font = "bold 15px ui-monospace, monospace";
-            ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText(speedPop.mph + " MPH", x, y);
-            ctx.restore();
+            atLogical(x, y, () => {
+                ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+                pillPath(-54, -17, 108, 32, 16);
+                ctx.fillStyle = "rgba(10, 10, 15, 0.88)"; ctx.fill();
+                ctx.strokeStyle = `hsl(${hue}, 100%, 55%)`; ctx.lineWidth = 1.5; ctx.stroke();
+                ctx.fillStyle = `hsl(${hue}, 100%, 68%)`;
+                ctx.font = "bold 15px ui-monospace, monospace";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText(speedPop.mph + " MPH", 0, 0);
+            });
         }
 
         /* ---------- Boot ---------- */
@@ -1737,6 +1855,8 @@
             if (Number.isFinite(dv) && dv >= 0 && dv < DIFFS.length) savedDiff = dv;
             savedMode = localStorage.getItem('pong-mode') === 'timed' ? 'timed' : 'classic';
         } catch (e) {}
+        layout();
+        window.addEventListener('load', layout);
         setDiff(savedDiff, false);
         setGameMode(savedMode, false);
         updateHUD();
