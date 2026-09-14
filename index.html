@@ -885,7 +885,7 @@
            commentary survives losing the connection like the rest of the game. */
         function warmVoiceCache() {
             if (!window.caches || !voiceIndex) return;
-            caches.open('princess-pong-v3').then(c => {
+            caches.open('princess-pong-v4').then(c => {
                 let i = 0;
                 (function next() {
                     if (i >= voiceIndex.ids.length) return;
@@ -1143,7 +1143,7 @@
         let gameModeType = 'classic', timeLeft = 90, matchOver = false;
         let owenMode = false, michaelMode = false, p1Stealth = false, p2Stealth = false;
         let difficulty = 1, isHost = false, online = false, conn = null, peer = null;
-        let netStarted = false, hostRetries = 0, joinTimer = null;
+        let netStarted = false, hostRetries = 0, joinTimer = null, netWatch = null, sawUnavailable = false;
         let rafId = null, lastTs = 0, acc = 0, tick = 0, aiErr = 0;
         let sensitivity = 1;
         let rallyHits = 0, speedTier = 0, streak = 0, lastScorer = null;
@@ -1965,6 +1965,7 @@
             if (netStarted) return;
             netStarted = true;
             clearTimeout(joinTimer);
+            clearInterval(netWatch); netWatch = null;
             el('statusMsg').innerText = 'Connected!';
             init(2, true);
         }
@@ -1980,10 +1981,53 @@
 
         function teardownNet() {
             clearTimeout(joinTimer);
+            clearInterval(netWatch); netWatch = null;
             netStarted = false; online = false; isHost = false; hostRetries = 0;
             if (conn) { try { conn.close(); } catch (e) {} conn = null; }
             if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
             el('hostBtn').disabled = false; el('joinBtn').disabled = false;
+        }
+
+        /* More than one STUN server, so a single unreachable one does not sink
+           the whole attempt. */
+        const PEER_OPTS = {
+            config: {
+                iceServers: [
+                    { urls: ['stun:stun.l.google.com:19302',
+                             'stun:stun1.l.google.com:19302',
+                             'stun:stun2.l.google.com:19302'] },
+                    { urls: 'stun:stun.cloudflare.com:3478' }
+                ]
+            }
+        };
+
+        function setHostState(text) {
+            const n = el('hostState');
+            if (n) n.textContent = text;
+        }
+
+        function showHostCode(id, state) {
+            el('statusMsg').innerHTML =
+                'CODE: <b class="code">' + id.replace(PEER_PREFIX, '') + '</b><br>' +
+                '<span class="hint" id="hostState">' + state + '</span>';
+        }
+
+        /* PeerJS drops its signalling socket on any network blip, when the tab is
+           backgrounded, or when a phone locks. A dropped socket releases the id,
+           so the code on screen quietly stops working and the other player is told
+           no such game exists. Nothing reconnected it before. */
+        function watchPeer(host, id) {
+            clearInterval(netWatch);
+            netWatch = setInterval(() => {
+                if (!peer || peer.destroyed) { clearInterval(netWatch); return; }
+                if (netStarted) return;
+                if (peer.disconnected) {
+                    if (host) showHostCode(id, 'Reconnecting\u2026');
+                    try { peer.reconnect(); } catch (e) {}
+                } else if (host) {
+                    showHostCode(id, 'Waiting for Player 2\u2026');
+                }
+            }, 2500);
         }
 
         function startMultiplayer(host) {
@@ -1991,33 +2035,40 @@
                 netError('Multiplayer library did not load. Check your connection and refresh.');
                 return;
             }
-            const code = el('joinId').value.trim();
-            if (!host && !/^\d{4}$/.test(code)) {
+            const code = el('joinId').value.replace(/\D/g, '').slice(0, 4);
+            if (!host && code.length !== 4) {
                 netError('Enter the 4-digit code from the host.');
                 return;
             }
+            if (!host) el('joinId').value = code;
 
             teardownNet();
             isHost = host;
-            el('statusMsg').innerText = 'Connecting...';
+            sawUnavailable = false;
+            el('statusMsg').innerText = 'Connecting\u2026';
             el('hostBtn').disabled = true; el('joinBtn').disabled = true;
 
-            // A bare 4-digit id collides with every other app on the public PeerJS
-            // broker, which is why joining used to fail at random. Namespace it.
+            // A bare 4-digit id collides with every other app on the public broker.
             const myId = host ? PEER_PREFIX + Math.floor(1000 + Math.random() * 9000) : undefined;
-            peer = new Peer(myId);
+            peer = new Peer(myId, PEER_OPTS);
 
             peer.on('open', id => {
                 if (host) {
-                    el('statusMsg').innerHTML =
-                        `CODE: <b class="code">${id.replace(PEER_PREFIX, '')}</b><br>` +
-                        `<span class="hint">Give this to Player 2</span>`;
+                    showHostCode(id, 'Waiting for Player 2\u2026');
+                    watchPeer(true, id);
                 } else {
+                    watchPeer(false, null);
                     conn = peer.connect(PEER_PREFIX + code);
                     bindConn();
                     joinTimer = setTimeout(() => {
-                        if (!netStarted) { teardownNet(); netError('No answer. Check the code and that the host is still waiting.'); }
-                    }, 15000);
+                        if (netStarted) return;
+                        // Reaching here without peer-unavailable means the host was
+                        // found and the direct link is what failed.
+                        netError(sawUnavailable
+                            ? 'No game found with that code. Check it, and that the host still has their screen open.'
+                            : 'Found the game, but the two devices could not link up. This is usually a network blocking it \u2014 try both on the same Wi-Fi, or one on mobile data.');
+                        teardownNet();
+                    }, 20000);
                 }
             });
 
@@ -2028,17 +2079,33 @@
             });
 
             peer.on('error', err => {
-                const type = err && err.type;
+                const type = (err && err.type) || '';
                 if (host && type === 'unavailable-id' && hostRetries < 5) {
-                    hostRetries++; startMultiplayer(true); return;   // code taken, roll another
+                    hostRetries++; startMultiplayer(true); return;     // code taken, roll another
                 }
-                if (type === 'peer-unavailable' || !netStarted) {
+                if (type === 'peer-unavailable') {
+                    sawUnavailable = true;
+                    clearTimeout(joinTimer);
+                    netError('No game found with that code. Check it, and that the host still has their screen open.');
                     teardownNet();
-                    netError(friendlyError(type));
+                    return;
+                }
+                if (['browser-incompatible', 'ssl-unavailable', 'invalid-id', 'invalid-key'].includes(type)) {
+                    teardownNet(); netError(friendlyError(type)); return;
+                }
+                // network, server-error, socket-error: recoverable. Destroying the
+                // peer here used to kill a waiting host outright.
+                if (!netStarted) {
+                    if (host) setHostState('Connection hiccup \u2014 retrying\u2026');
+                    try { if (peer && peer.disconnected) peer.reconnect(); } catch (e) {}
                 }
             });
 
-            peer.on('disconnected', () => { if (!netStarted) netError('Lost the matchmaking server. Try again.'); });
+            peer.on('disconnected', () => {
+                if (netStarted || !peer || peer.destroyed) return;
+                if (host) setHostState('Reconnecting\u2026');
+                try { peer.reconnect(); } catch (e) {}
+            });
         }
 
         /* ---------- Admin ---------- */

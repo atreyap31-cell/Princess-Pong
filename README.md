@@ -9,6 +9,9 @@ Pong for a princess and a senior citizen.
 - **1 Player** — against the bot, with four difficulty levels.
 - **2 Players** — same screen, two people.
 - **Online** — one player hosts and reads out a 4-digit code, the other joins with it.
+  The host screen shows whether the code is live, so keep it open until the other
+  player is in. Both devices need a network that allows a direct connection; if
+  they cannot reach each other the game says so rather than blaming the code.
   Play counts in with a 3-2-1 at the start of a match and again after every
   unpause, so nobody comes back to a ball already in flight.
 

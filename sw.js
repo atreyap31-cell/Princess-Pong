@@ -2,7 +2,7 @@
    Everything the game needs is same-origin and precached, so once the page has
    been opened while online it plays with no connection at all. Only the online
    multiplayer mode needs the network, and that traffic is never cached. */
-const VERSION = 'princess-pong-v3';
+const VERSION = 'princess-pong-v4';
 const ASSETS = [
   './',
   './index.html',
