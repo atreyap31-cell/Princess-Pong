@@ -93,6 +93,10 @@ whichever fit is larger, and follows you when you rotate the phone.
 Two people can share one phone upright: the bottom half of the screen drives P1,
 the top half drives P2, and two thumbs work at once.
 
+Online, the court is mirrored for whoever joined, so your own paddle is always
+the near one and you never have to reach across the screen for it. Your score
+sits at your end too.
+
 ## Screen size
 
 If the court does not sit right on your display, the Screen Size slider in

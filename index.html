@@ -80,6 +80,9 @@
 
         /* hidden, not removed, so the commentary stays centred in the row */
         #game-wrapper.rot #p1Score  { visibility: hidden; }
+        /* Mirrored for the joiner: their own score belongs at the near end. */
+        #game-wrapper.rot.flip #p1Score { visibility: visible; }
+        #game-wrapper.rot.flip #p2Score { visibility: hidden; }
         #game-wrapper.rot #pauseTab { opacity: 0.55; }
         #p1Score, #p2Score { flex: 0 0 auto; min-width: 1.5em; text-align: center; }
         #centre-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -1212,6 +1215,8 @@
            both depend on whether the court is turned on its side. */
         const dragCoord = e => rotatedView ? e.clientX : e.clientY;
         const dragSpan = rect => rotatedView ? rect.width : rect.height;
+        // Turned the other way, screen-right is court-up, so the drag inverts.
+        const dragSign = () => (rotatedView && viewFlip) ? -1 : 1;
 
         function paddleForPointer(e, rect) {
             if (online) return myPaddle();
@@ -1231,7 +1236,7 @@
             const rec = pointers.get(e.pointerId);
             if (!rec) return;
             const rect = canvas.getBoundingClientRect();
-            const dy = ((dragCoord(e) - rec.startC) / dragSpan(rect)) * H;
+            const dy = ((dragCoord(e) - rec.startC) / dragSpan(rect)) * H * dragSign();
             let target = rec.startPaddleY + dy * sensitivity;
             const maxY = H - rec.p.h;
             if (target < 0)         { target = 0;    rec.startC = dragCoord(e); rec.startPaddleY = 0; }
@@ -1310,10 +1315,15 @@
            portrait phone that means turning the court on its side, which roughly
            doubles it. */
         let rotatedView = false;
+        /* Joining puts you on P2, which would otherwise sit at the far end of the
+           screen. Mirror the court for the joiner so your own paddle is always the
+           near one and you never reach across. */
+        let viewFlip = false;
 
         function layout() {
             const stage = el('stage'), header = el('ui-header'), footer = el('ui-footer');
             const wrap = el('game-wrapper');
+            viewFlip = online && !isHost;
 
             // Decided on height alone, so it cannot feed back into the rotation choice.
             const compact = window.innerHeight < 500;
@@ -1335,9 +1345,11 @@
 
             canvas.style.width = len + 'px';
             canvas.style.height = wid + 'px';
+            // Turning the other way puts P2 at the near end; mirroring does the
+            // same job when the court is flat.
             canvas.style.transform = rotatedView
-                ? 'translate(-50%, -50%) rotate(-90deg)'
-                : 'translate(-50%, -50%)';
+                ? 'translate(-50%, -50%) rotate(' + (viewFlip ? 90 : -90) + 'deg)'
+                : 'translate(-50%, -50%)' + (viewFlip ? ' scaleX(-1)' : '');
 
             const sw = (rotatedView ? wid : len), sh = (rotatedView ? len : wid);
             stage.style.width = sw + 'px';
@@ -1345,6 +1357,8 @@
             header.style.width = sw + 'px';
             footer.style.width = sw + 'px';
             wrap.classList.toggle('rot', rotatedView);
+            wrap.classList.toggle('flip', viewFlip);
+            updateHUD();
         }
 
         let layoutTimer = null;
@@ -1441,6 +1455,7 @@
             el('ui-footer').style.visibility = 'visible';
             el('pauseTab').style.display = (online && !isHost) ? 'none' : 'block';
             refreshMenuVisibility();
+            layout();                    // the joiner's court is mirrored
             restartMatch();
             startLoop();
         }
@@ -1947,7 +1962,10 @@
 
         function updateHUD() {
             el('p1Score').innerText = p1.score;
-            el('p1ScoreB').innerText = p1.score;
+            const nearIsP1 = !viewFlip;
+            const nearScore = el('p1ScoreB');
+            nearScore.innerText = nearIsP1 ? p1.score : p2.score;
+            nearScore.style.color = nearIsP1 ? 'var(--primary)' : 'var(--secondary)';
             el('p2Score').innerText = p2.score;
             const t = Math.max(0, timeLeft);
             const m = Math.floor(t / 60), s = Math.floor(t % 60);
@@ -2329,7 +2347,8 @@
         function atLogical(lx, ly, fn) {
             ctx.save();
             ctx.translate(lx, ly);
-            if (rotatedView) ctx.rotate(Math.PI / 2);   // cancels the CSS -90deg
+            if (rotatedView) ctx.rotate(viewFlip ? -Math.PI / 2 : Math.PI / 2);
+            else if (viewFlip) ctx.scale(-1, 1);       // un-mirror the text
             fn();
             ctx.restore();
         }
@@ -2383,7 +2402,8 @@
             ctx.fillRect(0, 0, W, H);
             ctx.globalAlpha = alpha;
             ctx.translate(W / 2, H / 2);
-            if (rotatedView) ctx.rotate(Math.PI / 2);
+            if (rotatedView) ctx.rotate(viewFlip ? -Math.PI / 2 : Math.PI / 2);
+            else if (viewFlip) ctx.scale(-1, 1);
             ctx.scale(scale, scale);
             ctx.fillStyle = colour;
             ctx.font = 'bold 130px ui-monospace, monospace';
@@ -2401,17 +2421,22 @@
             ctx.fillStyle = "rgba(255,255,255,0.05)";
             // Turned on its side, the court's bottom edge is a screen edge, so the
             // bar is drawn down the logical left instead to stay under the play.
+            // Which court edge lands at the bottom of the screen depends on both the
+            // rotation and the mirror, so pick the one that actually ends up there.
             if (rotatedView) {
-                ctx.fillRect(0, 0, 3, H);
+                const bx = viewFlip ? W - 3 : 0;
+                ctx.fillRect(bx, 0, 3, H);
                 ctx.fillStyle = `hsl(${hue}, 100%, 55%)`;
-                ctx.fillRect(0, 0, 3, H * frac);
+                ctx.fillRect(bx, viewFlip ? H - H * frac : 0, 3, H * frac);
             } else {
                 ctx.fillRect(0, H - 3, W, 3);
                 ctx.fillStyle = `hsl(${hue}, 100%, 55%)`;
-                ctx.fillRect(0, H - 3, W * frac, 3);
+                ctx.fillRect(viewFlip ? W - W * frac : 0, H - 3, W * frac, 3);
             }
 
-            atLogical(rotatedView ? 26 : W - 10, H - 14, () => {
+            const mx = rotatedView ? (viewFlip ? W - 26 : 26) : (viewFlip ? 10 : W - 10);
+            const my = rotatedView ? (viewFlip ? 14 : H - 14) : H - 14;
+            atLogical(mx, my, () => {
                 ctx.font = "11px ui-monospace, monospace";
                 ctx.fillStyle = `hsla(${hue}, 100%, 70%, 0.45)`;
                 ctx.textAlign = "right"; ctx.textBaseline = "middle";
