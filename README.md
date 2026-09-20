@@ -10,8 +10,14 @@ Pong for a princess and a senior citizen.
 - **2 Players** — same screen, two people.
 - **Online** — one player hosts and reads out a 4-digit code, the other joins with it.
   The host screen shows whether the code is live, so keep it open until the other
-  player is in. Both devices need a network that allows a direct connection; if
-  they cannot reach each other the game says so rather than blaming the code.
+  player is in.
+
+  **Put both devices on the same Wi-Fi or the same hotspot.** Across two mobile
+  networks it usually will not connect: phone tethering and mobile data both sit
+  behind carrier NAT, and bridging two of those needs a relay server. There is no
+  free public relay left, so none is built in. If you have one, paste it into
+  `pong-turn` in browser storage as `{"urls":"turn:host:3478","username":"u","credential":"p"}`
+  and it is used from then on.
   Play counts in with a 3-2-1 at the start of a match and again after every
   unpause, so nobody comes back to a ball already in flight.
 

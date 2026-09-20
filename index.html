@@ -401,6 +401,9 @@
                         <button type="button" id="joinBtn" onclick="startMultiplayer(false)">Join</button>
                     </div>
                     <div id="statusMsg" class="hint">Both players need an internet connection.</div>
+                    <div class="hint" style="margin-top:6px; color:#6d6d78;">
+                        Best on the same Wi-Fi or hotspot. Across two mobile networks it usually cannot connect.
+                    </div>
                     <button type="button" class="subtle" style="margin-top: 16px;" onclick="returnToMenu()">Back</button>
                 </div>
             </div>
@@ -839,6 +842,7 @@
 
         let sfxSeq = 0, sfxName = '', lastSfxSeq = -1;
         let cmtId = '';
+        let freshPacket = false, lastSentPaddle = null;
         /* Phones only; follows the sound toggle so it can be turned off. */
         function buzz(pattern) {
             if (!soundOn || !navigator.vibrate) return;
@@ -904,6 +908,7 @@
                 voiceEl.src = voiceUrl(id);
                 const pr = voiceEl.play();
                 if (pr && pr.catch) pr.catch(() => {});
+                voiceEndsAt = performance.now() + (voiceIndex.dur[id] + 0.15) * 1000;
             } catch (e) {}
         }
 
@@ -1149,6 +1154,7 @@
         let rallyHits = 0, speedTier = 0, streak = 0, lastScorer = null;
         let saidClutch = false, cmtSeq = 0, cmtText = '', lastCmtSeq = -1;
         let cmtUntil = 0, cmtPriority = -1, cmtLastPick = {};
+        let voiceEndsAt = 0, cmtQueueTimer = null;
         const stats = { rally: 0, speed: 0, lead: 0, leader: '', powers: 0, ticks: 0,
                         nearMisses: 0, comebacks: 0, leadChanges: 0,
                         edges: 0, bestStreak: 0, deuce: 0 };
@@ -1471,13 +1477,20 @@
             el('pauseMenu').style.display = 'none';
             el('winnerText').innerText = who === 'DRAW' ? 'DRAW' : who + ' WINS';
             el('winScreen').style.display = 'flex';
-            cmtUntil = 0; cmtPriority = -1; say('win', 6);
+            queueSay('win', 6);        // let the rally's last line finish first
             play('win');
             buzz([50, 60, 50, 60, 110]);
             recordMatch(who);
             updateHUD();
             renderStats();
-            if (online && isHost) sendState(true, who);   // make sure the client hears about it
+            if (online && isHost) {
+                sendState(true, who);          // repeated: the channel may drop it
+                let tries = 0;
+                const again = setInterval(() => {
+                    if (++tries > 5 || !conn || !conn.open) { clearInterval(again); return; }
+                    sendState(true, who);
+                }, 150);
+            }
         }
 
         /* How good a watch was that? Weighted from the things that actually make
@@ -1560,6 +1573,9 @@
 
         function returnToMenu() {
             if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+            clearTimeout(cmtQueueTimer); cmtQueueTimer = null;
+            try { if (voiceEl) voiceEl.pause(); } catch (e) {}
+            voiceEndsAt = 0;
             teardownNet();
             gameActive = false; paused = false; matchOver = false;
             mode = 1; owenMode = michaelMode = false; p1Stealth = p2Stealth = false;
@@ -1778,11 +1794,25 @@
         }
 
         function clientUpdate() {
+            // Carry the ball on its last known heading when an update is missing, so
+            // a dropped packet costs a little accuracy instead of freezing the ball.
+            if (!freshPacket && countdown <= 0 && !matchOver) {
+                let nx = ball.x + ball.dx, ny = ball.y + ball.dy;
+                if (ny < B_RAD && ball.dy < 0) { ny = 2 * B_RAD - ny; ball.dy *= -1; }
+                else if (ny > H - B_RAD && ball.dy > 0) { ny = 2 * (H - B_RAD) - ny; ball.dy *= -1; }
+                ball.x = nx; ball.y = ny;
+            }
+            freshPacket = false;
+
             const move = 1.7 * sensitivity * (ball.speed / START_SPEED), fric = 0.84;
             if (keys['ArrowUp']   || keys['KeyW']) p2.vy -= move;
             if (keys['ArrowDown'] || keys['KeyS']) p2.vy += move;
             p2.vy *= fric; p2.y += p2.vy;
-            if (conn && conn.open) conn.send({ t: 'i', y: p2.y });
+            // Only worth sending when it actually moved, and rounded like the rest.
+            if (conn && conn.open) {
+                const y = Math.round(p2.y * 10) / 10;
+                if (y !== lastSentPaddle) { lastSentPaddle = y; conn.send({ t: 'i', y: y }); }
+            }
         }
 
         function maybeSpawnPowerUp() {
@@ -1820,6 +1850,23 @@
             playVoice(cmtId);
         }
 
+        /* True while a line is still on screen or still being spoken. */
+        function lineBusy() {
+            const now = performance.now();
+            const spoken = (voiceUnlocked && voiceOn) ? voiceEndsAt : 0;
+            return now < Math.max(cmtUntil, spoken);
+        }
+
+        /* Wait for the current line to finish rather than cutting it off. Used when
+           the match ends, so the last call of a rally is not chopped mid-sentence. */
+        function queueSay(kind, priority) {
+            clearTimeout(cmtQueueTimer);
+            const fire = () => { cmtUntil = 0; cmtPriority = -1; say(kind, priority); };
+            if (!lineBusy()) { fire(); return; }
+            const wait = Math.max(cmtUntil, (voiceUnlocked && voiceOn) ? voiceEndsAt : 0) - performance.now();
+            cmtQueueTimer = setTimeout(fire, Math.max(0, wait) + 80);
+        }
+
         function showCommentary(text) {
             const c = el('commentary');
             c.textContent = text;
@@ -1829,9 +1876,10 @@
         }
 
         function clearCommentary() {
+            clearTimeout(cmtQueueTimer); cmtQueueTimer = null;
             el('commentary').classList.remove('show');
             el('commentary').textContent = '';
-            cmtUntil = 0; cmtPriority = -1;
+            cmtUntil = 0; cmtPriority = -1; voiceEndsAt = 0;
         }
 
         function expireCommentary() {
@@ -1885,18 +1933,43 @@
         /* ---------- Networking ----------
            Host runs the simulation and streams state; the client streams only its
            paddle position back. Everything is guarded on conn.open. */
+        /* The commentary line, mode name and sound name used to go out sixty times
+           a second even though they change every few seconds - about two thirds of
+           the traffic was the same strings over and over. They ride along only when
+           they actually change now. */
+        let lastSent = { gm: null, chaos: null, pw: '', cs: -1, ss: -1, ps: -1 };
+        const resetSentCache = () => { lastSent = { gm: null, chaos: null, pw: '', cs: -1, ss: -1, ps: -1 }; };
+
         function sendState(over, win) {
             if (!online || !conn || !conn.open) return;
-            conn.send({
-                t: 's', bx: ball.x, by: ball.y, bs: ball.speed,
-                p1y: p1.y, p1h: p1.h, p2h: p2.h,
-                s1: p1.score, s2: p2.score, time: timeLeft,
-                gm: gameModeType, chaos: chaosMode, pw: currentPowerUp,
-                cs: cmtSeq, ct: cmtText, ci: cmtId, ss: sfxSeq, sn: sfxName,
-                ps: popSeq, pm: popMph, pd: popSide, cd: countdown,
-                st: over ? stats : undefined,
-                over: !!over, win: win
-            });
+            const dc = conn.dataChannel;
+            const buffered = dc ? dc.bufferedAmount : 0;
+            if (!over) {
+                // Back off as the link gets congested rather than piling on: half
+                // rate under pressure, nothing at all once it is truly backed up.
+                if (buffered > 64000) return;
+                if (buffered > 16000 && tick % 2) return;
+            }
+
+            // A tenth of a pixel is far below anything visible, and full float
+            // precision was costing roughly half the packet.
+            const r1 = v => Math.round(v * 10) / 10;
+            const m = {
+                t: 's', bx: r1(ball.x), by: r1(ball.y), bs: r1(ball.speed),
+                bdx: r1(ball.dx), bdy: r1(ball.dy),
+                p1y: r1(p1.y), p1h: p1.h, p2h: p2.h,
+                s1: p1.score, s2: p2.score, time: r1(timeLeft), cd: r1(countdown)
+            };
+            if (gameModeType !== lastSent.gm) { m.gm = gameModeType; lastSent.gm = gameModeType; }
+            if (chaosMode !== lastSent.chaos) { m.chaos = chaosMode; lastSent.chaos = chaosMode; }
+            const pwKey = currentPowerUp
+                ? currentPowerUp.x + ',' + currentPowerUp.y + ',' + currentPowerUp.type : '';
+            if (pwKey !== lastSent.pw) { m.pw = currentPowerUp; lastSent.pw = pwKey; }
+            if (cmtSeq !== lastSent.cs) { m.cs = cmtSeq; m.ct = cmtText; m.ci = cmtId; lastSent.cs = cmtSeq; }
+            if (sfxSeq !== lastSent.ss) { m.ss = sfxSeq; m.sn = sfxName; lastSent.ss = sfxSeq; }
+            if (popSeq !== lastSent.ps) { m.ps = popSeq; m.pm = popMph; m.pd = popSide; lastSent.ps = popSeq; }
+            if (over) { m.over = true; m.win = win; m.st = stats; }
+            conn.send(m);
         }
 
         function onData(d) {
@@ -1907,9 +1980,11 @@
             }
             if (d.t !== 's') return;
             ball.x = d.bx; ball.y = d.by; ball.speed = d.bs;
+            if (typeof d.bdx === 'number') { ball.dx = d.bdx; ball.dy = d.bdy; }
+            freshPacket = true;
             p1.y = d.p1y; p1.h = d.p1h; p2.h = d.p2h;
             p1.score = d.s1; p2.score = d.s2; timeLeft = d.time;
-            if (d.gm !== gameModeType) setGameMode(d.gm, false);
+            if (d.gm !== undefined && d.gm !== gameModeType) setGameMode(d.gm, false);
             if (d.cs !== undefined && d.cs !== lastCmtSeq) {
                 lastCmtSeq = d.cs;
                 if (d.ct) {
@@ -1917,7 +1992,8 @@
                     playVoice(d.ci);
                 }
             }
-            chaosMode = d.chaos; currentPowerUp = d.pw;
+            if (d.chaos !== undefined) chaosMode = d.chaos;
+            if (d.pw !== undefined) currentPowerUp = d.pw;
             if (typeof d.cd === 'number') countdown = d.cd;
             if (d.ps !== undefined && d.ps !== lastPopSeq) {
                 lastPopSeq = d.ps;
@@ -1966,6 +2042,7 @@
             netStarted = true;
             clearTimeout(joinTimer);
             clearInterval(netWatch); netWatch = null;
+            resetSentCache();               // first packet must carry everything
             el('statusMsg').innerText = 'Connected!';
             init(2, true);
         }
@@ -1990,16 +2067,29 @@
 
         /* More than one STUN server, so a single unreachable one does not sink
            the whole attempt. */
-        const PEER_OPTS = {
-            config: {
-                iceServers: [
-                    { urls: ['stun:stun.l.google.com:19302',
-                             'stun:stun1.l.google.com:19302',
-                             'stun:stun2.l.google.com:19302'] },
-                    { urls: 'stun:stun.cloudflare.com:3478' }
-                ]
-            }
-        };
+        /* STUN alone only gets two devices talking when at least one network
+           allows a direct connection. Mobile networks usually do not - a phone
+           hotspot and a second phone on mobile data are both behind carrier NAT,
+           and nothing can bridge them without a relay. Every free public relay is
+           dead, so there is none built in; paste your own into Settings and it
+           gets used from then on. */
+        function iceConfig() {
+            const servers = [
+                { urls: ['stun:stun.l.google.com:19302',
+                         'stun:stun1.l.google.com:19302',
+                         'stun:stun2.l.google.com:19302'] },
+                { urls: 'stun:stun.cloudflare.com:3478' }
+            ];
+            try {
+                const raw = localStorage.getItem('pong-turn');
+                if (raw) {
+                    const t = JSON.parse(raw);
+                    if (t && t.urls) servers.push(t);
+                }
+            } catch (e) {}
+            return { iceServers: servers };
+        }
+        const hasRelay = () => { try { return !!localStorage.getItem('pong-turn'); } catch (e) { return false; } };
 
         function setHostState(text) {
             const n = el('hostState');
@@ -2050,7 +2140,7 @@
 
             // A bare 4-digit id collides with every other app on the public broker.
             const myId = host ? PEER_PREFIX + Math.floor(1000 + Math.random() * 9000) : undefined;
-            peer = new Peer(myId, PEER_OPTS);
+            peer = new Peer(myId, { config: iceConfig() });
 
             peer.on('open', id => {
                 if (host) {
@@ -2058,7 +2148,9 @@
                     watchPeer(true, id);
                 } else {
                     watchPeer(false, null);
-                    conn = peer.connect(PEER_PREFIX + code);
+                    // Ordered+reliable is wrong here: one lost packet holds up every
+                    // position behind it while it is retransmitted.
+                    conn = peer.connect(PEER_PREFIX + code, { reliable: false });
                     bindConn();
                     joinTimer = setTimeout(() => {
                         if (netStarted) return;
@@ -2066,7 +2158,9 @@
                         // found and the direct link is what failed.
                         netError(sawUnavailable
                             ? 'No game found with that code. Check it, and that the host still has their screen open.'
-                            : 'Found the game, but the two devices could not link up. This is usually a network blocking it \u2014 try both on the same Wi-Fi, or one on mobile data.');
+                            : 'Found the game, but the two devices could not reach each other. Mobile networks block this. '
+                              + 'Put both devices on the same Wi-Fi or the same hotspot and it will work.'
+                              + (hasRelay() ? '' : ' (No relay server is set up \u2014 see Settings.)'));
                         teardownNet();
                     }, 20000);
                 }
