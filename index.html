@@ -843,9 +843,12 @@
         let sfxSeq = 0, sfxName = '', lastSfxSeq = -1;
         let cmtId = '';
         let freshPacket = false, lastSentPaddle = null;
+        let corrX = 0, corrY = 0, authX = 0, authY = 0, ballParked = false;
         /* Phones only; follows the sound toggle so it can be turned off. */
         function buzz(pattern) {
             if (!soundOn || !navigator.vibrate) return;
+            // Without a prior tap the browser refuses and logs a warning each time.
+            if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
             try { navigator.vibrate(pattern); } catch (e) {}
         }
 
@@ -1710,17 +1713,34 @@
             if (nY < B_RAD && ball.dy < 0) { nY = 2 * B_RAD - nY; ball.dy *= -1; play('wall'); }
             else if (nY > H - B_RAD && ball.dy > 0) { nY = 2 * (H - B_RAD) - nY; ball.dy *= -1; play('wall'); }
 
-            const p = (ball.dx < 0) ? p1 : p2;
-            const coll = (ball.dx < 0)
-                ? (ball.x >= p1.x + P_WIDTH && nX <= p1.x + P_WIDTH && nY >= p1.y && nY <= p1.y + p1.h)
-                : (ball.x <= p2.x && nX >= p2.x && nY >= p2.y && nY <= p2.y + p2.h);
+            /* Swept test. Checking the ball's y at the END of the step missed any
+               shot that crossed the paddle plane early in the step and travelled on
+               past it - at speed that is most of a steep shot, and it is why balls
+               went through paddle edges. Work out where the ball actually crosses
+               the plane, and treat the ball as a disc rather than a point. */
+            const goingLeft = ball.dx < 0;
+            const p = goingLeft ? p1 : p2;
+            const planeX = goingLeft ? p1.x + P_WIDTH : p2.x;
+            const crossed = goingLeft ? (ball.x >= planeX && nX <= planeX)
+                                      : (ball.x <= planeX && nX >= planeX);
+
+            let coll = false, hitY = nY;
+            if (crossed) {
+                const span = nX - ball.x;
+                const t = Math.abs(span) > 1e-9 ? (planeX - ball.x) / span : 0;
+                hitY = ball.y + (nY - ball.y) * Math.max(0, Math.min(1, t));
+                coll = hitY + B_RAD >= p.y && hitY - B_RAD <= p.y + p.h;
+            }
 
             if (coll) {
-                ball.y = nY;
-                ball.x = (ball.dx < 0) ? p1.x + P_WIDTH + B_RAD : p2.x - B_RAD;
+                ball.y = hitY;
+                ball.x = goingLeft ? planeX + B_RAD : planeX - B_RAD;
                 ball.speed = Math.min(ball.speed * SPEED_MULT, MAX_SPEED);
-                const angle = (p.y + p.h / 2 - ball.y) / (p.h / 2) * (Math.PI / 3);
-                ball.dx = (ball.dx < 0 ? 1 : -1) * ball.speed * Math.cos(angle);
+                // Clamped: a clip off the very tip must not fling the ball at a
+                // steeper angle than a clean middle hit can produce.
+                const off = Math.max(-1, Math.min(1, (p.y + p.h / 2 - ball.y) / (p.h / 2)));
+                const angle = off * (Math.PI / 3);
+                ball.dx = (goingLeft ? 1 : -1) * ball.speed * Math.cos(angle);
                 ball.dy = -ball.speed * Math.sin(angle);
 
                 play('paddle');
@@ -1794,10 +1814,14 @@
         }
 
         function clientUpdate() {
-            // Carry the ball on its last known heading when an update is missing, so
-            // a dropped packet costs a little accuracy instead of freezing the ball.
-            if (!freshPacket && countdown <= 0 && !matchOver) {
-                let nx = ball.x + ball.dx, ny = ball.y + ball.dy;
+            /* Run the same ball physics the host is running and ease onto the
+               authoritative position, rather than sitting still between packets and
+               jumping when one lands. A missing packet then costs a little accuracy
+               instead of a visible stall. */
+            if (!ballParked && countdown <= 0 && !matchOver) {
+                let nx = ball.x + ball.dx + corrX * 0.35;
+                let ny = ball.y + ball.dy + corrY * 0.35;
+                corrX *= 0.65; corrY *= 0.65;
                 if (ny < B_RAD && ball.dy < 0) { ny = 2 * B_RAD - ny; ball.dy *= -1; }
                 else if (ny > H - B_RAD && ball.dy > 0) { ny = 2 * (H - B_RAD) - ny; ball.dy *= -1; }
                 ball.x = nx; ball.y = ny;
@@ -1979,8 +2003,21 @@
                 return;
             }
             if (d.t !== 's') return;
-            ball.x = d.bx; ball.y = d.by; ball.speed = d.bs;
+            ball.speed = d.bs;
             if (typeof d.bdx === 'number') { ball.dx = d.bdx; ball.dy = d.bdy; }
+            // Two identical positions in a row means the host is holding the ball
+            // (counting in, or the breather after a point) - do not run ahead of it.
+            ballParked = (d.bx === authX && d.by === authY);
+            authX = d.bx; authY = d.by;
+
+            const jump = Math.hypot(d.bx - ball.x, d.by - ball.y);
+            if (ballParked || jump > 140 || countdown > 0 || matchOver) {
+                ball.x = d.bx; ball.y = d.by; corrX = corrY = 0;   // serve, reset: snap
+            } else {
+                // Spread the correction over the next few frames instead of
+                // yanking the ball, which is what made it look choppy.
+                corrX = d.bx - ball.x; corrY = d.by - ball.y;
+            }
             freshPacket = true;
             p1.y = d.p1y; p1.h = d.p1h; p2.h = d.p2h;
             p1.score = d.s1; p2.score = d.s2; timeLeft = d.time;
